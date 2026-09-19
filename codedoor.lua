@@ -24,7 +24,7 @@ hardware.setAlarmSoundEnabled(cfg.alarm_sound)
 
 local state = {
     gateOpened = config.loadGateState(),
-    authorized = false,
+    authorized = not auth.hasPassword(cfg),
     status = ""
 }
 
@@ -66,6 +66,7 @@ local timerWorker = session.createTimerWorker(
         renderSessionTimer()
     end,
     function()
+        if not auth.hasPassword(cfg) then return end
         ui.cancelInstruction()
         if not session.isCommandRunning() then
             state.authorized = false
@@ -96,7 +97,7 @@ local function waitingForCommand()
 
             local inputCommand = read()
 
-            if session.isExpired() or not state.authorized then
+            if auth.hasPassword(cfg) and (session.isExpired() or not state.authorized) then
                 session.clearExpired()
                 state.authorized = false
                 session.stop()
@@ -110,7 +111,7 @@ local function waitingForCommand()
                 if result == "Exit" then
                     auth.restore()
                     return
-                elseif result == "Logout" or cfg.timeout == 0 or session.isExpired() then
+                elseif auth.hasPassword(cfg) and (result == "Logout" or cfg.timeout == 0 or session.isExpired()) then
                     session.clearExpired()
                     state.authorized = false
                     session.stop()
@@ -133,7 +134,9 @@ local function waitingForCommand()
 
             if auth.verify(inputPassword, cfg, sha256) then
                 state.authorized = true
-                session.start(cfg.timeout)
+                if auth.hasPassword(cfg) then
+                    session.start(cfg.timeout)
+                end
 
                 frame.clear()
                 frame.setCursorPos(1, 1)

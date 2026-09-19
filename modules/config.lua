@@ -58,8 +58,12 @@ function config.load(sha256)
                 for k, v in pairs(data) do
                     settings[k] = v
                 end
-                if data.password and not data.password_hash and sha256 then
-                    settings.password_hash = sha256.digest(tostring(data.password) .. (settings.salt or ""))
+                if data.password ~= nil then
+                    if tostring(data.password) == "" then
+                        settings.password_hash = ""
+                    elseif sha256 then
+                        settings.password_hash = sha256.digest(tostring(data.password) .. (settings.salt or ""))
+                    end
                     settings.password = nil
                     config.save(settings)
                 end
@@ -82,6 +86,8 @@ function config.load(sha256)
                 elseif sha256 then
                     settings.password_hash = sha256.digest(rawPass .. (settings.salt or ""))
                 end
+            else
+                settings.password_hash = ""
             end
             if rawSide and rawSide ~= "" then
                 settings.redstone_side = rawSide

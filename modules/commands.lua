@@ -160,43 +160,76 @@ function commands.execute(command, ctx)
     elseif inTable(commandAliases["passwd"], command) then
         outputFrame.setTextColor(colors.white)
         print("--- Change Password ---")
-        outputFrame.setTextColor(colors.lightGray)
-        write("Current password: ")
-        outputFrame.setTextColor(colors.white)
-        local cur = read(utf8.char(7))
 
-        if ctx.auth.verify(cur, cfg, ctx.sha256) then
+        local canProceed = false
+        if ctx.auth.hasPassword(cfg) then
             outputFrame.setTextColor(colors.lightGray)
+            write("Current password: ")
+            outputFrame.setTextColor(colors.white)
+            local cur = read(utf8.char(7))
+
+            if ctx.auth.verify(cur, cfg, ctx.sha256) then
+                canProceed = true
+            else
+                outputFrame.setTextColor(colors.red)
+                print("Incorrect current password.")
+            end
+        else
+            canProceed = true
+        end
+
+        if canProceed then
+            outputFrame.setTextColor(colors.lightGray)
+            print("Enter new password (empty to remove):")
             write("New password: ")
             outputFrame.setTextColor(colors.white)
             local newP = read(utf8.char(7))
 
-            if newP and #newP > 0 then
-                outputFrame.setTextColor(colors.lightGray)
-                write("Confirm password: ")
-                outputFrame.setTextColor(colors.white)
-                local confP = read(utf8.char(7))
+            outputFrame.setTextColor(colors.lightGray)
+            write("Confirm password: ")
+            outputFrame.setTextColor(colors.white)
+            local confP = read(utf8.char(7))
 
-                if newP == confP then
+            if newP == confP then
+                if newP == "" then
+                    cfg.password_hash = ""
+                    ctx.config.save(cfg)
+                    if ctx.session then
+                        ctx.session.stop()
+                    end
+                    if ctx.renderSessionTimer then
+                        ctx.renderSessionTimer()
+                    end
+                    outputFrame.setTextColor(colors.lime)
+                    print("Password removed! Authorization disabled.")
+                else
                     cfg.password_hash = ctx.sha256.digest(newP .. (cfg.salt or ""))
                     ctx.config.save(cfg)
+                    if ctx.session and cfg.timeout and cfg.timeout > 0 then
+                        ctx.session.start(cfg.timeout)
+                    end
+                    if ctx.renderSessionTimer then
+                        ctx.renderSessionTimer()
+                    end
                     outputFrame.setTextColor(colors.lime)
                     print("Password changed successfully!")
-                else
-                    outputFrame.setTextColor(colors.red)
-                    print("Passwords do not match.")
                 end
             else
                 outputFrame.setTextColor(colors.red)
-                print("Password cannot be empty.")
+                print("Passwords do not match.")
             end
-        else
-            outputFrame.setTextColor(colors.red)
-            print("Incorrect current password.")
         end
         sleep(1.5)
 
     elseif inTable(commandAliases["logout"], command) then
+        if not ctx.auth.hasPassword(cfg) then
+            outputFrame.setTextColor(colors.yellow)
+            print("No password set. Authorization is disabled.")
+            sleep(1.5)
+            term.redirect(ui.getFrame())
+            return "OK"
+        end
+
         term.redirect(ui.getFrame())
         ctx.renderScreen()
 
