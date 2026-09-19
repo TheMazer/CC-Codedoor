@@ -1,3 +1,7 @@
+-- Program Termination Restriction
+local oldPullEvent = os.pullEvent
+os.pullEvent = os.pullEventRaw
+
 -- Defining Color Palette
 term.setPaletteColor(colors.yellow, 0xFFD800)
 term.setPaletteColor(colors.lightGray, 0xB2B2B2)
@@ -294,9 +298,13 @@ local function waitingForCommand()
             frame.setTextColor(colors.lightGray)
             write("Command: ")
             frame.setTextColor(colors.white)
-            inputCommand = read()
-            if inputCommand ~= "" then
-                output = runCommand(inputCommand)
+
+            -- Allow Termination
+            os.pullEvent = oldPullEvent
+
+            local inputCommand = read()
+            if inputCommand and inputCommand ~= "" then
+                local output = runCommand(inputCommand)
                 if output == "Exit" then
                     return
                 end
@@ -310,6 +318,9 @@ local function waitingForCommand()
             write("Password: ")
             frame.setTextColor(colors.white)
             inputPassword = read(utf8.char(7))
+
+            -- Restrict Termination
+            os.pullEvent = os.pullEventRaw
 
             if inputPassword == password then
                 -- Visual
