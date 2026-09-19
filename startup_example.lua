@@ -1,5 +1,5 @@
 currentScreen = term.current()
-shell.run("codedoor.lua")
+shell.run("codedoor/codedoor.lua")
 
 -- Restoring Color Palette
 term.setPaletteColor(colors.yellow, term.nativePaletteColor(colors.yellow))
