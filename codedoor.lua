@@ -1,13 +1,30 @@
+-- File Paths Resolution
+local programPath = shell and shell.getRunningProgram() or ""
+local baseDir = fs.getDir(programPath)
+
+local function getFilePath(filename)
+    if baseDir ~= "" and fs.exists(fs.combine(baseDir, filename)) then
+        return fs.combine(baseDir, filename)
+    elseif fs.exists(filename) then
+        return filename
+    elseif baseDir ~= "" then
+        return fs.combine(baseDir, filename)
+    else
+        return filename
+    end
+end
+
 -- Loading Libraries
+local shaPath = getFilePath("sha256.lua")
 local ok, lib = pcall(require, "sha256")
-local sha256 = (ok and lib) or (fs.exists("sha256.lua") and dofile("sha256.lua"))
+local sha256 = (ok and lib) or (fs.exists(shaPath) and dofile(shaPath))
 if not sha256 then
     error("Failed to load sha256 library")
 end
 
 -- Configuration & State
-local CONFIG_FILE = "cdsettings.json"
-local STATE_FILE = "gatestate.json"
+local CONFIG_FILE = getFilePath("cdsettings.json")
+local STATE_FILE = getFilePath("gatestate.json")
 
 -- Configuration Management
 local config = {
@@ -15,7 +32,8 @@ local config = {
     salt = "",
     redstone_side = "bottom",
     move_time = 16,
-    alarm_sound = true
+    alarm_sound = true,
+    timeout = 300
 }
 
 local function saveConfig(cfg)
@@ -148,8 +166,9 @@ term.setBackgroundColor(colors.yellow)
 term.write("Gate Controller")
 
 -- Setting up Main Frame
-local frame = window.create(term.current(), 2, 5, w-2, h-7)
-local statusBar = window.create(term.current(), 2, h-1, w-2, 1)
+local parentScreen = term.current()
+local frame = window.create(parentScreen, 2, 5, w-2, h-7)
+local statusBar = window.create(parentScreen, 2, h-1, w-2, 1)
 statusBar.setBackgroundColor(colors.black)
 statusBar.clear()
 frame.setBackgroundColor(colors.black)
@@ -161,6 +180,9 @@ local gateOpened = loadGateState()
 local authorized = false
 local status = ""
 local alarming = false
+local sessionRemaining = nil
+local sessionExpired = false
+local isCommandRunning = false
 
 -- Restore saved redstone output on launch
 rs.setOutput(config.redstone_side, gateOpened)
@@ -283,6 +305,44 @@ local function renderStatusBar()
     end
 end
 
+-- Render Session Timer
+local function renderSessionTimer()
+    if not parentScreen then return end
+    local cur = term.current()
+    local curX, curY = cur.getCursorPos()
+    local curBlink = cur.getCursorBlink()
+    local curFg = cur.getTextColor()
+    local curBg = cur.getBackgroundColor()
+
+    parentScreen.setCursorBlink(false)
+    parentScreen.setBackgroundColor(colors.yellow)
+
+    if authorized and config.timeout and config.timeout > 0 and sessionRemaining then
+        local str = tostring(math.max(0, sessionRemaining)) .. "s"
+        local x = w - #str - 1
+
+        if sessionRemaining <= 10 then
+            parentScreen.setTextColor(colors.red)
+        else
+            parentScreen.setTextColor(colors.black)
+        end
+
+        parentScreen.setCursorPos(w - 8, 2)
+        parentScreen.write(string.rep(" ", 8))
+
+        parentScreen.setCursorPos(x, 2)
+        parentScreen.write(str)
+    else
+        parentScreen.setCursorPos(w - 8, 2)
+        parentScreen.write(string.rep(" ", 8))
+    end
+
+    cur.setTextColor(curFg)
+    cur.setBackgroundColor(curBg)
+    cur.setCursorPos(curX, curY)
+    cur.setCursorBlink(curBlink)
+end
+
 -- Render Screen
 local function renderScreen()
     -- Clearing up
@@ -308,6 +368,7 @@ local function renderScreen()
     end
 
     renderStatusBar()
+    renderSessionTimer()
 end
 
 -- Run Command Function
@@ -491,13 +552,44 @@ local function runCommand(command)
 
         sleep(1.5)
         authorized = false
+        sessionRemaining = nil
+        os.pullEvent = os.pullEventRaw
         renderScreen()
 
     elseif inTable(commands["exit"], command) then
+        os.pullEvent = oldPullEvent
         return "Exit"
     end
 
     term.redirect(frame)
+end
+
+-- Session Timeout Background Worker
+local function timerWorker()
+    while true do
+        if authorized and config.timeout and config.timeout > 0 and sessionRemaining then
+            sleep(1)
+            if authorized and config.timeout and config.timeout > 0 and sessionRemaining then
+                sessionRemaining = sessionRemaining - 1
+                renderSessionTimer()
+
+                if sessionRemaining <= 0 then
+                    sessionExpired = true
+                    instructionActive = false
+                    instructionQueue = nil
+
+                    if not isCommandRunning then
+                        authorized = false
+                        os.pullEvent = os.pullEventRaw
+                        renderSessionTimer()
+                        os.queueEvent("key", keys.enter)
+                    end
+                end
+            end
+        else
+            sleep(0.5)
+        end
+    end
 end
 
 -- Waiting for Command / Password Function
@@ -516,10 +608,29 @@ local function waitingForCommand()
             os.pullEvent = oldPullEvent
 
             local inputCommand = read()
-            if inputCommand and inputCommand ~= "" then
+
+            if sessionExpired or not authorized then
+                sessionExpired = false
+                authorized = false
+                sessionRemaining = nil
+                os.pullEvent = os.pullEventRaw
+                renderScreen()
+            elseif inputCommand and inputCommand ~= "" then
+                isCommandRunning = true
                 local output = runCommand(inputCommand)
+                isCommandRunning = false
+
                 if output == "Exit" then
+                    os.pullEvent = oldPullEvent
                     return
+                end
+
+                if config.timeout == 0 or sessionExpired then
+                    sessionExpired = false
+                    authorized = false
+                    sessionRemaining = nil
+                    os.pullEvent = os.pullEventRaw
+                    renderScreen()
                 end
             end
         else
@@ -538,6 +649,13 @@ local function waitingForCommand()
 
             if verifyPassword(inputPassword) then
                 authorized = true
+                sessionExpired = false
+
+                if config.timeout and config.timeout > 0 then
+                    sessionRemaining = config.timeout
+                else
+                    sessionRemaining = nil
+                end
 
                 -- Clear frame and show Access Granted
                 frame.clear()
@@ -545,6 +663,7 @@ local function waitingForCommand()
                 frame.setTextColor(colors.lime)
                 frame.write("Access Granted")
                 renderStatusBar()
+                renderSessionTimer()
 
                 -- Queue smooth instruction typing in separate background worker
                 instructionQueue = "You can now operate the Gate"
@@ -570,4 +689,4 @@ end
 
 -- Start Program
 renderScreen()
-parallel.waitForAny(waitingForCommand, alarm, instructionWorker)
+parallel.waitForAny(waitingForCommand, alarm, instructionWorker, timerWorker)

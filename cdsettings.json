@@ -3,5 +3,6 @@
   "salt": "",
   "redstone_side": "bottom",
   "move_time": 16,
-  "alarm_sound": true
+  "alarm_sound": true,
+  "timeout": 300
 }
