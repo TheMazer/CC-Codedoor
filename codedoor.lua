@@ -50,8 +50,15 @@ end
 ui.setSoundCallback(hardware.playNote)
 ui.init()
 
-local function renderStatusBar()
-    ui.renderStatusBar(state.status, state.gateOpened)
+local function isNetworkOnline()
+    if cfg.mode == "SYNC" then
+        return sync.isAvailable() and (sync.findServer(false) ~= nil)
+    end
+    return true
+end
+
+local function renderStatusBar(blinkTick)
+    ui.renderStatusBar(state.status, state.gateOpened, isNetworkOnline(), blinkTick, cfg.mode)
 end
 
 local function renderSessionTimer()
@@ -59,7 +66,7 @@ local function renderSessionTimer()
 end
 
 local function renderScreen()
-    ui.renderScreen(state.authorized, state.status, state.gateOpened, cfg.timeout, session.getRemaining())
+    ui.renderScreen(state.authorized, state.status, state.gateOpened, cfg.timeout, session.getRemaining(), isNetworkOnline(), false, cfg.mode)
 end
 
 local ctx = {
@@ -190,11 +197,29 @@ local syncWorker = sync.createListenerWorker(function(opened, status)
     end
 end)
 
+-- Background status bar ticker & clock worker
+local blinkTick = false
+local clockTimer = 0
+local function statusTickerWorker()
+    while true do
+        sleep(0.5)
+        blinkTick = not blinkTick
+        clockTimer = clockTimer + 0.5
+        if state.status and state.status ~= "" then
+            renderStatusBar(blinkTick)
+        elseif clockTimer >= 2 then
+            clockTimer = 0
+            renderStatusBar(false)
+        end
+    end
+end
+
 -- Start Application
 renderScreen()
 if cfg.mode == "SYNC" then
-    parallel.waitForAny(waitingForCommand, ui.instructionWorker, timerWorker, syncWorker)
+    parallel.waitForAny(waitingForCommand, ui.instructionWorker, timerWorker, syncWorker, statusTickerWorker)
 else
-    parallel.waitForAny(waitingForCommand, hardware.alarmWorker, ui.instructionWorker, timerWorker)
+    parallel.waitForAny(waitingForCommand, hardware.alarmWorker, ui.instructionWorker, timerWorker, statusTickerWorker)
 end
 auth.restore()
+hardware.restorePalette()

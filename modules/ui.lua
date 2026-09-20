@@ -10,6 +10,12 @@ local playSound = nil
 local instructionQueue = nil
 local instructionActive = false
 
+local currentStatus = ""
+local currentGateOpened = false
+local currentNetOnline = true
+local currentMode = "STANDALONE"
+local currentBlink = false
+
 function ui.setSoundCallback(callback)
     playSound = callback
 end
@@ -35,10 +41,10 @@ function ui.init()
 
     -- Setting up Main Frames
     parentScreen = term.current()
-    frame = window.create(parentScreen, 2, 5, w - 2, h - 7)
-    statusBar = window.create(parentScreen, 2, h - 1, w - 2, 1)
+    frame = window.create(parentScreen, 2, 5, w - 2, h - 5)
+    statusBar = window.create(parentScreen, 1, h, w, 1)
 
-    statusBar.setBackgroundColor(colors.black)
+    statusBar.setBackgroundColor(colors.gray)
     statusBar.clear()
     frame.setBackgroundColor(colors.black)
     frame.clear()
@@ -100,8 +106,14 @@ function ui.renderSessionTimer(authorized, timeout, remainingSeconds)
     cur.setCursorBlink(curBlink)
 end
 
-function ui.renderStatusBar(statusText, gateOpened)
+function ui.renderStatusBar(statusText, gateOpened, netOnline, blinkTick, mode)
     if not statusBar then return end
+
+    if statusText ~= nil then currentStatus = statusText end
+    if gateOpened ~= nil then currentGateOpened = (gateOpened == true) end
+    if netOnline ~= nil then currentNetOnline = (netOnline == true) end
+    if blinkTick ~= nil then currentBlink = (blinkTick == true) end
+    if mode ~= nil then currentMode = mode end
 
     local cur = term.current()
     local curX, curY = cur.getCursorPos()
@@ -110,23 +122,97 @@ function ui.renderStatusBar(statusText, gateOpened)
     local curBg = cur.getBackgroundColor()
 
     statusBar.setCursorPos(1, 1)
-    statusBar.write(string.rep(" ", w - 2))
+    statusBar.setBackgroundColor(colors.gray)
+    statusBar.clear()
 
+    -- Segment 1: Gate Status (Background: colors.gray)
     statusBar.setCursorPos(1, 1)
+    statusBar.setBackgroundColor(colors.gray)
     statusBar.setTextColor(colors.gray)
-    statusBar.write("Gate Status: ")
+    statusBar.write(" ")
 
-    if statusText and statusText ~= "" then
-        statusBar.setTextColor(colors.orange)
-        statusBar.write(statusText)
+    local dotChar = string.char(7)
+    local gateDotColor = colors.red
+    local gateText = "Closed"
+    local gateTextColor = colors.red
+
+    if currentStatus and currentStatus ~= "" then
+        gateDotColor = (currentBlink and colors.yellow or colors.orange)
+        gateText = currentStatus
+        gateTextColor = (currentBlink and colors.yellow or colors.orange)
+    elseif currentGateOpened then
+        gateDotColor = colors.lime
+        gateText = "Open"
+        gateTextColor = colors.lime
     else
-        if gateOpened then
-            statusBar.setTextColor(colors.lime)
-            statusBar.write("Open")
-        else
-            statusBar.setTextColor(colors.red)
-            statusBar.write("Closed")
-        end
+        gateDotColor = colors.red
+        gateText = "Closed"
+        gateTextColor = colors.red
+    end
+
+    statusBar.setTextColor(gateDotColor)
+    statusBar.write(dotChar)
+
+    statusBar.setTextColor(colors.white)
+    statusBar.write(" Gate: ")
+    statusBar.setTextColor(gateTextColor)
+    statusBar.write(gateText .. " ")
+
+    -- Transition 1: Segment 1 (gray) -> Segment 2 (black)
+    statusBar.setTextColor(colors.gray)
+    statusBar.setBackgroundColor(colors.black)
+    statusBar.write(string.char(157))
+
+    -- Segment 2: Network / Mode Status (Background: colors.black)
+    statusBar.setBackgroundColor(colors.black)
+    statusBar.write(" ")
+
+    local netDotColor = colors.lime
+    local netLabel = " Network: "
+    local netStatusText = "Online "
+    local netStatusColor = colors.lime
+
+    if currentMode == "STANDALONE" then
+        netDotColor = colors.lightGray
+        netLabel = " Mode: "
+        netStatusText = "Standalone "
+        netStatusColor = colors.lightGray
+    elseif not currentNetOnline then
+        netDotColor = colors.red
+        netLabel = " Network: "
+        netStatusText = "Offline "
+        netStatusColor = colors.red
+    end
+
+    statusBar.setTextColor(netDotColor)
+    statusBar.write(dotChar)
+
+    statusBar.setTextColor(colors.white)
+    statusBar.write(netLabel)
+    statusBar.setTextColor(netStatusColor)
+    statusBar.write(netStatusText)
+
+    -- Transition 2: Segment 2 (black) -> Segment 3 (gray)
+    statusBar.setTextColor(colors.black)
+    statusBar.setBackgroundColor(colors.gray)
+    statusBar.write(string.char(157))
+
+    -- Segment 3: System Time / Spacer (Background: colors.gray)
+    local curBarX, _ = statusBar.getCursorPos()
+    local timeStr = textutils.formatTime(os.time(), true)
+    local rightStr = " " .. timeStr .. " "
+    local remaining = w - curBarX + 1
+
+    statusBar.setBackgroundColor(colors.gray)
+    if remaining >= #rightStr then
+        local fillSpaces = remaining - #rightStr
+        statusBar.setTextColor(colors.gray)
+        statusBar.write(string.rep(" ", fillSpaces))
+        statusBar.setTextColor(colors.lightGray)
+        statusBar.write(rightStr)
+    elseif remaining > 0 then
+        statusBar.setTextColor(colors.gray)
+        statusBar.write(string.rep(" ", remaining))
     end
 
     cur.setTextColor(curFg)
@@ -135,11 +221,10 @@ function ui.renderStatusBar(statusText, gateOpened)
     cur.setCursorBlink(curBlink)
 end
 
-function ui.renderScreen(authorized, statusText, gateOpened, timeout, remainingSeconds)
+function ui.renderScreen(authorized, statusText, gateOpened, timeout, remainingSeconds, netOnline, blinkTick, mode)
     if not frame or not statusBar then return end
 
     frame.clear()
-    statusBar.clear()
 
     if authorized then
         frame.setCursorPos(1, 1)
@@ -157,7 +242,7 @@ function ui.renderScreen(authorized, statusText, gateOpened, timeout, remainingS
         frame.write("To continue, enter the password below")
     end
 
-    ui.renderStatusBar(statusText, gateOpened)
+    ui.renderStatusBar(statusText, gateOpened, netOnline, blinkTick, mode)
     ui.renderSessionTimer(authorized, timeout, remainingSeconds)
 end
 
