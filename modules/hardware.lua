@@ -1,18 +1,54 @@
 -- hardware.lua - Speaker, Redstone and Alarm Hardware Abstraction
 local hardware = {}
 
-local spkr = peripheral.find("speaker")
 local alarming = false
 local alarmSoundEnabled = true
+local remoteSoundCallback = nil
 
 function hardware.setAlarmSoundEnabled(enabled)
     alarmSoundEnabled = (enabled == true)
 end
 
-function hardware.playNote(instrument, volume, pitch)
-    if spkr then
-        pcall(spkr.playNote, instrument, volume, pitch)
+function hardware.setRemoteSoundCallback(callback)
+    remoteSoundCallback = callback
+end
+
+function hardware.getSpeakers()
+    local list = {}
+    for _, name in ipairs(peripheral.getNames()) do
+        if peripheral.getType(name) == "speaker" then
+            local s = peripheral.wrap(name)
+            if s and s.playNote then
+                table.insert(list, s)
+            end
+        end
     end
+    return list
+end
+
+function hardware.hasSpeaker()
+    for _, name in ipairs(peripheral.getNames()) do
+        if peripheral.getType(name) == "speaker" then
+            return true
+        end
+    end
+    return false
+end
+
+function hardware.playNote(instrument, volume, pitch)
+    local spkrs = hardware.getSpeakers()
+    local played = false
+    for _, s in ipairs(spkrs) do
+        if pcall(s.playNote, instrument, volume, pitch) then
+            played = true
+        end
+    end
+
+    if not played and remoteSoundCallback then
+        pcall(remoteSoundCallback, instrument, volume, pitch)
+    end
+
+    return played
 end
 
 function hardware.setOutput(side, state)

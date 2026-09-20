@@ -122,6 +122,35 @@ function sync.request(action, payload, timeoutSeconds)
     end
 end
 
+function sync.send(action, payload)
+    if not rednet.isOpen() then
+        sync.init()
+    end
+    if not rednet.isOpen() then return false end
+
+    local serverId = sync.findServer(false)
+    if not serverId then
+        serverId = sync.findServer(true)
+    end
+    if not serverId then return false end
+
+    local packet = {
+        type = "request",
+        action = action,
+        payload = payload,
+        sender = os.getComputerID()
+    }
+    return rednet.send(serverId, textutils.serializeJSON(packet), protocol)
+end
+
+function sync.sendSound(instrument, volume, pitch)
+    return sync.send("play_note", {
+        instrument = instrument,
+        volume = volume,
+        pitch = pitch
+    })
+end
+
 function sync.requestOpen()
     return sync.request("open")
 end

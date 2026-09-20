@@ -486,7 +486,20 @@ local function networkWorker()
                     local action = data.action
                     local caller = "Client #" .. tostring(sender)
 
-                    if action == "get_status" then
+                    if action == "play_note" or action == "play_sound" then
+                        local p = data.payload
+                        if p and p.instrument then
+                            hardware.playNote(p.instrument, p.volume or 3, p.pitch or 0)
+                        end
+                        if reqId then
+                            rednet.send(sender, textutils.serializeJSON({
+                                type = "response",
+                                reqId = reqId,
+                                success = true
+                            }), cfg.protocol)
+                        end
+
+                    elseif action == "get_status" then
                         rednet.send(sender, textutils.serializeJSON({
                             type = "response",
                             reqId = reqId,
@@ -555,6 +568,7 @@ local function networkWorker()
             end
         else
             sleep(1)
+            rednetOk = initRednet()
         end
     end
 end

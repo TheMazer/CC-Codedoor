@@ -37,6 +37,10 @@ if cfg.mode == "SYNC" then
         state.gateOpened = (res.opened == true)
         state.status = res.status or ""
     end
+
+    hardware.setRemoteSoundCallback(function(instrument, volume, pitch)
+        sync.sendSound(instrument, volume, pitch)
+    end)
 else
     -- Apply Saved Redstone Signal on Startup in STANDALONE mode
     hardware.setOutput(cfg.redstone_side, state.gateOpened)
