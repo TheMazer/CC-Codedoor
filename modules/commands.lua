@@ -117,7 +117,7 @@ function commands.execute(command, ctx)
                 hardware.startAlarm()
                 sleep(2)
 
-                state.status = "M O V I N G"
+                state.status = "Moving"
                 ctx.renderStatusBar()
                 hardware.playNote("basedrum", 3, 0)
                 sleep(0.1)
@@ -169,7 +169,7 @@ function commands.execute(command, ctx)
                 hardware.startAlarm()
                 sleep(2)
 
-                state.status = "M O V I N G"
+                state.status = "Moving"
                 ctx.renderStatusBar()
                 hardware.playNote("basedrum", 3, 0)
                 sleep(0.1)

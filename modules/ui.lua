@@ -122,7 +122,7 @@ function ui.renderStatusBar(statusText, gateOpened)
     else
         if gateOpened then
             statusBar.setTextColor(colors.lime)
-            statusBar.write("Opened")
+            statusBar.write("Open")
         else
             statusBar.setTextColor(colors.red)
             statusBar.write("Closed")

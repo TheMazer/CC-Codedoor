@@ -33,10 +33,15 @@ function hardware.isAlarming()
     return alarming
 end
 
+function hardware.restorePalette()
+    if term.nativePaletteColor then
+        term.setPaletteColor(colors.orange, term.nativePaletteColor(colors.orange))
+    end
+end
+
 function hardware.alarmWorker()
     while true do
         while alarming do
-            term.setPaletteColor(colors.orange, 0xD3562C)
             if alarmSoundEnabled then
                 hardware.playNote("bit", 3, 6)
                 hardware.playNote("harp", 3, 6)
@@ -52,7 +57,6 @@ function hardware.alarmWorker()
                 sleep(0.2)
             end
 
-            term.setPaletteColor(colors.orange, 0xefb032)
             sleep(0.4)
         end
         sleep(0.1)

@@ -59,8 +59,12 @@ local parentScreen = term.current()
 local w, h = term.getSize()
 
 -- Windows
-local statusWin = window.create(parentScreen, 1, 4, w, 1)
-local consoleWin = window.create(parentScreen, 1, 5, w, h - 5)
+-- Top Header: y=1..3
+-- Middle Console: y=4..h-2 (height = h - 5)
+-- Bottom Status Bar: y=h-1 (height = 1)
+-- Bottom Footer: y=h
+local consoleWin = window.create(parentScreen, 1, 4, w, h - 5)
+local statusWin = window.create(parentScreen, 1, h - 1, w, 1)
 
 -- Console buffer and virtual scrolling state
 local consoleLines = {}
@@ -221,52 +225,125 @@ local function renderFooter()
     paintutils.drawFilledBox(1, h, w, h, colors.gray)
 
     parentScreen.setCursorPos(2, h)
+    parentScreen.setTextColor(colors.lightGray)
+    parentScreen.write("[")
     parentScreen.setTextColor(colors.white)
-    parentScreen.write("[O]")
+    parentScreen.write("O")
     parentScreen.setTextColor(colors.lightGray)
-    parentScreen.write(" Open  ")
+    parentScreen.write("] Open  ")
 
+    parentScreen.setTextColor(colors.lightGray)
+    parentScreen.write("[")
     parentScreen.setTextColor(colors.white)
-    parentScreen.write("[C]")
+    parentScreen.write("C")
     parentScreen.setTextColor(colors.lightGray)
-    parentScreen.write(" Close  ")
+    parentScreen.write("] Close  ")
 
+    parentScreen.setTextColor(colors.lightGray)
+    parentScreen.write("[")
     parentScreen.setTextColor(colors.white)
-    parentScreen.write("[Q]")
+    parentScreen.write("Q")
     parentScreen.setTextColor(colors.lightGray)
-    parentScreen.write(" Stop Server")
+    parentScreen.write("] Stop Server")
 
-    local scrollHint = "Scroll: [Wheel]"
-    parentScreen.setCursorPos(w - #scrollHint - 1, h)
+    -- Scroll hint with identical button design: [↑↓] Scroll
+    local arrowUp = string.char(24)
+    local arrowDown = string.char(25)
+    local scrollText = " Scroll"
+    local totalLen = 1 + 2 + 1 + #scrollText
+    parentScreen.setCursorPos(w - totalLen, h)
+
     parentScreen.setTextColor(colors.lightGray)
-    parentScreen.write(scrollHint)
+    parentScreen.write("[")
+    parentScreen.setTextColor(colors.white)
+    parentScreen.write(arrowUp .. arrowDown)
+    parentScreen.setTextColor(colors.lightGray)
+    parentScreen.write("]" .. scrollText)
 end
 
-local function renderStatusLine()
-    statusWin.setBackgroundColor(colors.black)
+local function renderStatusLine(blinkTick)
+    statusWin.setCursorPos(1, 1)
+    statusWin.setBackgroundColor(colors.gray)
     statusWin.clear()
-    statusWin.setCursorPos(2, 1)
+
+    -- Segment 1: Gate Status (Background: colors.gray)
+    statusWin.setCursorPos(1, 1)
+    statusWin.setBackgroundColor(colors.gray)
     statusWin.setTextColor(colors.gray)
-    statusWin.write("Gate Status: ")
+    statusWin.write(" ")
+
+    local dotChar = string.char(7)
+    local gateDotColor = colors.red
+    local gateText = "Closed"
+    local gateTextColor = colors.red
 
     if status and status ~= "" then
-        statusWin.setTextColor(colors.orange)
-        statusWin.write(status)
+        gateDotColor = (blinkTick and colors.yellow or colors.orange)
+        gateText = status
+        gateTextColor = (blinkTick and colors.yellow or colors.orange)
+    elseif gateOpened then
+        gateDotColor = colors.lime
+        gateText = "Open"
+        gateTextColor = colors.lime
     else
-        if gateOpened then
-            statusWin.setTextColor(colors.lime)
-            statusWin.write("Opened")
-        else
-            statusWin.setTextColor(colors.red)
-            statusWin.write("Closed")
-        end
+        gateDotColor = colors.red
+        gateText = "Closed"
+        gateTextColor = colors.red
     end
 
+    statusWin.setTextColor(gateDotColor)
+    statusWin.write(dotChar)
+
+    statusWin.setTextColor(colors.white)
+    statusWin.write(" Gate: ")
+    statusWin.setTextColor(gateTextColor)
+    statusWin.write(gateText .. " ")
+
+    -- Transition 1: Segment 1 (gray) -> Segment 2 (black)
     statusWin.setTextColor(colors.gray)
-    local rednetStr = rednetOk and "[Network: Online]" or "[Network: Offline]"
-    statusWin.setCursorPos(w - #rednetStr - 1, 1)
-    statusWin.setTextColor(rednetOk and colors.lime or colors.red)
-    statusWin.write(rednetStr)
+    statusWin.setBackgroundColor(colors.black)
+    statusWin.write(string.char(157))
+
+    -- Segment 2: Network Status (Background: colors.black)
+    statusWin.setBackgroundColor(colors.black)
+    statusWin.write(" ")
+
+    local netDotColor = rednetOk and colors.lime or colors.red
+    statusWin.setTextColor(netDotColor)
+    statusWin.write(dotChar)
+
+    statusWin.setTextColor(colors.white)
+    statusWin.write(" Network: ")
+    if rednetOk then
+        statusWin.setTextColor(colors.lime)
+        statusWin.write("Online ")
+    else
+        statusWin.setTextColor(colors.red)
+        statusWin.write("Offline ")
+    end
+
+    -- Transition 2: Segment 2 (black) -> Segment 3 (gray)
+    statusWin.setTextColor(colors.black)
+    statusWin.setBackgroundColor(colors.gray)
+    statusWin.write(string.char(157))
+
+    -- Segment 3: System Time / Spacer (Background: colors.gray)
+    local curX, _ = statusWin.getCursorPos()
+    local timeStr = textutils.formatTime(os.time(), true)
+    local rightStr = " " .. timeStr .. " "
+    local remaining = w - curX + 1
+
+    statusWin.setBackgroundColor(colors.gray)
+    if remaining >= #rightStr then
+        local fillSpaces = remaining - #rightStr
+        statusWin.setTextColor(colors.gray)
+        statusWin.write(string.rep(" ", fillSpaces))
+        statusWin.setTextColor(colors.lightGray)
+        statusWin.write(rightStr)
+    elseif remaining > 0 then
+        statusWin.setTextColor(colors.gray)
+        statusWin.write(string.rep(" ", remaining))
+    end
 end
 
 local function broadcastStatus()
@@ -295,7 +372,7 @@ local function performOpening(caller)
     hardware.startAlarm()
     sleep(2)
 
-    status = "M O V I N G"
+    status = "Moving"
     broadcastStatus()
     hardware.playNote("basedrum", 3, 0)
     sleep(0.1)
@@ -303,7 +380,16 @@ local function performOpening(caller)
     sleep(0.1)
     hardware.setOutput(cfg.redstone_side, true)
 
-    sleep(cfg.move_time or 16)
+    local moveTotal = cfg.move_time or 16
+    local elapsed = 0
+    local blinkTick = false
+    while elapsed < moveTotal do
+        sleep(0.5)
+        elapsed = elapsed + 0.5
+        blinkTick = not blinkTick
+        renderStatusLine(blinkTick)
+    end
+
     hardware.stopAlarm()
     hardware.playNote("basedrum", 3, 0)
     sleep(0.1)
@@ -331,7 +417,7 @@ local function performClosing(caller)
     hardware.startAlarm()
     sleep(2)
 
-    status = "M O V I N G"
+    status = "Moving"
     broadcastStatus()
     hardware.playNote("basedrum", 3, 0)
     sleep(0.1)
@@ -339,7 +425,16 @@ local function performClosing(caller)
     sleep(0.1)
     hardware.setOutput(cfg.redstone_side, false)
 
-    sleep(cfg.move_time or 16)
+    local moveTotal = cfg.move_time or 16
+    local elapsed = 0
+    local blinkTick = false
+    while elapsed < moveTotal do
+        sleep(0.5)
+        elapsed = elapsed + 0.5
+        blinkTick = not blinkTick
+        renderStatusLine(blinkTick)
+    end
+
     hardware.stopAlarm()
     hardware.playNote("basedrum", 3, 0)
     sleep(0.1)
@@ -357,6 +452,7 @@ end
 
 -- Worker: Executes queued gate actions
 local function actionWorker()
+    local clockTimer = 0
     while true do
         if queueAction then
             local act = queueAction
@@ -367,7 +463,14 @@ local function actionWorker()
                 performClosing(act.caller)
             end
         end
-        sleep(0.1)
+        sleep(0.5)
+        clockTimer = clockTimer + 0.5
+        if clockTimer >= 2 then
+            clockTimer = 0
+            if not isBusy then
+                renderStatusLine()
+            end
+        end
     end
 end
 
@@ -541,6 +644,7 @@ if rednetOk then
     rednet.unhost(cfg.protocol or "codedoor_sync")
     rednet.close()
 end
+hardware.restorePalette()
 
 term.redirect(parentScreen)
 term.setBackgroundColor(colors.black)
