@@ -62,28 +62,145 @@ local w, h = term.getSize()
 local statusWin = window.create(parentScreen, 1, 4, w, 1)
 local consoleWin = window.create(parentScreen, 1, 5, w, h - 5)
 
-local function logMsg(source, text, textColor)
-    local defaultColor = consoleWin.getTextColor()
-    textColor = textColor or colors.white
+-- Console buffer and virtual scrolling state
+local consoleLines = {}
+local scrollOffset = 0
+local consoleHeight = h - 5
 
-    local timeStr = textutils.formatTime(os.time(), true)
-    consoleWin.setTextColor(colors.gray)
-    consoleWin.write("[" .. timeStr .. "] ")
-
-    if source == "Server" then
-        consoleWin.setTextColor(colors.orange)
-    else
-        consoleWin.setTextColor(colors.yellow)
+local function wrapText(text, maxLen)
+    local lines = {}
+    local current = ""
+    for word in text:gmatch("%S+") do
+        if #current == 0 then
+            while #word > maxLen do
+                table.insert(lines, word:sub(1, maxLen))
+                word = word:sub(maxLen + 1)
+            end
+            current = word
+        else
+            if #current + 1 + #word <= maxLen then
+                current = current .. " " .. word
+            else
+                table.insert(lines, current)
+                while #word > maxLen do
+                    table.insert(lines, word:sub(1, maxLen))
+                    word = word:sub(maxLen + 1)
+                end
+                current = word
+            end
+        end
     end
-    consoleWin.write(source)
+    if #current > 0 then
+        table.insert(lines, current)
+    end
+    if #lines == 0 then
+        table.insert(lines, "")
+    end
+    return lines
+end
 
-    consoleWin.setTextColor(colors.lightGray)
-    consoleWin.write(" > ")
+local function renderConsole()
+    consoleWin.setBackgroundColor(colors.black)
+    consoleWin.clear()
 
-    consoleWin.setTextColor(textColor)
-    consoleWin.write(text .. "\n")
+    local totalLines = #consoleLines
+    local maxOffset = math.max(0, totalLines - consoleHeight)
+    if scrollOffset > maxOffset then
+        scrollOffset = maxOffset
+    elseif scrollOffset < 0 then
+        scrollOffset = 0
+    end
 
-    consoleWin.setTextColor(defaultColor)
+    local startLine = math.max(1, totalLines - consoleHeight + 1 - scrollOffset)
+    local endLine = math.min(totalLines, startLine + consoleHeight - 1)
+
+    local row = 1
+    for i = startLine, endLine do
+        consoleWin.setCursorPos(1, row)
+        local segs = consoleLines[i]
+        if segs then
+            for _, seg in ipairs(segs) do
+                consoleWin.setTextColor(seg.color)
+                consoleWin.write(seg.text)
+            end
+        end
+        row = row + 1
+    end
+
+    if scrollOffset > 0 then
+        local indicator = " [^ +" .. tostring(scrollOffset) .. " ] "
+        consoleWin.setCursorPos(w - #indicator, 1)
+        consoleWin.setBackgroundColor(colors.gray)
+        consoleWin.setTextColor(colors.yellow)
+        consoleWin.write(indicator)
+        consoleWin.setBackgroundColor(colors.black)
+    end
+end
+
+local function logMsg(source, text, textColor)
+    textColor = textColor or colors.white
+    local timeStr = textutils.formatTime(os.time(), true)
+    local prefix = "[" .. timeStr .. "] " .. source .. " > "
+    local prefixLen = #prefix
+    local maxFirstWidth = math.max(10, w - prefixLen)
+    local maxContWidth = math.max(10, w - prefixLen)
+
+    local rawLines = {}
+    for line in (text .. "\n"):gmatch("(.-)\r?\n") do
+        table.insert(rawLines, line)
+    end
+    if #rawLines == 0 then table.insert(rawLines, text) end
+
+    local newLinesCount = 0
+    local isFirstRawLine = true
+    for _, rawLine in ipairs(rawLines) do
+        if isFirstRawLine then
+            local wrapped = wrapText(rawLine, maxFirstWidth)
+            if #wrapped == 0 then
+                table.insert(consoleLines, {
+                    { text = "[" .. timeStr .. "] ", color = colors.gray },
+                    { text = source, color = (source == "Server" and colors.orange or colors.yellow) },
+                    { text = " > ", color = colors.lightGray }
+                })
+                newLinesCount = newLinesCount + 1
+            else
+                table.insert(consoleLines, {
+                    { text = "[" .. timeStr .. "] ", color = colors.gray },
+                    { text = source, color = (source == "Server" and colors.orange or colors.yellow) },
+                    { text = " > ", color = colors.lightGray },
+                    { text = wrapped[1], color = textColor }
+                })
+                newLinesCount = newLinesCount + 1
+                for i = 2, #wrapped do
+                    table.insert(consoleLines, {
+                        { text = string.rep(" ", prefixLen), color = colors.black },
+                        { text = wrapped[i], color = textColor }
+                    })
+                    newLinesCount = newLinesCount + 1
+                end
+            end
+            isFirstRawLine = false
+        else
+            local wrapped = wrapText(rawLine, maxContWidth)
+            for _, wLine in ipairs(wrapped) do
+                table.insert(consoleLines, {
+                    { text = string.rep(" ", prefixLen), color = colors.black },
+                    { text = wLine, color = textColor }
+                })
+                newLinesCount = newLinesCount + 1
+            end
+        end
+    end
+
+    while #consoleLines > 500 do
+        table.remove(consoleLines, 1)
+    end
+
+    if scrollOffset > 0 then
+        scrollOffset = scrollOffset + newLinesCount
+    end
+
+    renderConsole()
 end
 
 local function renderHeader()
@@ -118,6 +235,11 @@ local function renderFooter()
     parentScreen.write("[Q]")
     parentScreen.setTextColor(colors.lightGray)
     parentScreen.write(" Stop Server")
+
+    local scrollHint = "Scroll: [Wheel]"
+    parentScreen.setCursorPos(w - #scrollHint - 1, h)
+    parentScreen.setTextColor(colors.lightGray)
+    parentScreen.write(scrollHint)
 end
 
 local function renderStatusLine()
@@ -360,10 +482,38 @@ local function inputWorker()
                 else
                     queueAction = { type = "close", caller = "Console" }
                 end
+            elseif key == keys.pageUp then
+                local totalLines = #consoleLines
+                local maxOffset = math.max(0, totalLines - consoleHeight)
+                scrollOffset = math.max(0, math.min(maxOffset, scrollOffset + math.max(1, consoleHeight - 2)))
+                renderConsole()
+            elseif key == keys.pageDown then
+                scrollOffset = math.max(0, scrollOffset - math.max(1, consoleHeight - 2))
+                renderConsole()
+            elseif key == keys.home then
+                local totalLines = #consoleLines
+                scrollOffset = math.max(0, totalLines - consoleHeight)
+                renderConsole()
+            elseif key == keys.endKey then
+                scrollOffset = 0
+                renderConsole()
+            elseif key == keys.up then
+                local totalLines = #consoleLines
+                local maxOffset = math.max(0, totalLines - consoleHeight)
+                scrollOffset = math.max(0, math.min(maxOffset, scrollOffset + 1))
+                renderConsole()
+            elseif key == keys.down then
+                scrollOffset = math.max(0, scrollOffset - 1)
+                renderConsole()
             end
         elseif event == "mouse_scroll" then
             local dir = p1
-            consoleWin.scroll(dir)
+            local totalLines = #consoleLines
+            local maxOffset = math.max(0, totalLines - consoleHeight)
+            -- dir == -1: wheel up -> scroll up -> increase scrollOffset
+            -- dir == 1: wheel down -> scroll down -> decrease scrollOffset
+            scrollOffset = math.max(0, math.min(maxOffset, scrollOffset - dir * 2))
+            renderConsole()
         end
     end
 end
