@@ -56,8 +56,15 @@ function sync.findServer(forceRefresh)
     local id = nil
     if serverName and serverName ~= "" then
         id = rednet.lookup(protocol, serverName)
-    else
-        id = rednet.lookup(protocol)
+    end
+
+    if not id then
+        local anyServer = rednet.lookup(protocol)
+        if type(anyServer) == "table" then
+            id = anyServer[1]
+        elseif type(anyServer) == "number" then
+            id = anyServer
+        end
     end
 
     if id then
