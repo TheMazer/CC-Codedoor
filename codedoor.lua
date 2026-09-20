@@ -88,6 +88,7 @@ local ctx = {
 local timerWorker = session.createTimerWorker(
     function(remaining)
         renderSessionTimer()
+        renderStatusBar(false)
     end,
     function()
         if not auth.hasPassword(cfg) then return end
@@ -207,7 +208,7 @@ local function statusTickerWorker()
         clockTimer = clockTimer + 0.5
         if state.status and state.status ~= "" then
             renderStatusBar(blinkTick)
-        elseif clockTimer >= 2 then
+        elseif clockTimer >= 1 then
             clockTimer = 0
             renderStatusBar(false)
         end

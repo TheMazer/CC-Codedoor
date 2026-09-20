@@ -465,7 +465,7 @@ local function actionWorker()
         end
         sleep(0.5)
         clockTimer = clockTimer + 0.5
-        if clockTimer >= 2 then
+        if clockTimer >= 1 then
             clockTimer = 0
             if not isBusy then
                 renderStatusLine()
