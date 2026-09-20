@@ -24,7 +24,6 @@ config.getFilePath = getFilePath
 
 local CONFIG_FILE = getFilePath("cdsettings.json")
 local STATE_FILE = getFilePath("gatestate.json")
-local LEGACY_CONFIG_FILE = getFilePath("cdsettings.cfg")
 local SERVER_CONFIG_FILE = getFilePath("cdserver.json")
 
 local settings = {
@@ -124,35 +123,6 @@ function config.load(sha256)
                 end
                 return settings
             end
-        end
-    end
-
-    if fs.exists(LEGACY_CONFIG_FILE) then
-        local file = fs.open(LEGACY_CONFIG_FILE, "r")
-        if file then
-            local rawPass = file.readLine()
-            local rawSide = file.readLine()
-            local rawTime = file.readLine()
-            file.close()
-
-            if rawPass and rawPass ~= "" then
-                if #rawPass == 64 and rawPass:match("^%x+$") then
-                    settings.password_hash = rawPass:lower()
-                elseif sha256 then
-                    settings.password_hash = sha256.digest(rawPass .. (settings.salt or ""))
-                end
-            else
-                settings.password_hash = ""
-            end
-            if rawSide and rawSide ~= "" then
-                settings.redstone_side = rawSide
-            end
-            if rawTime and tonumber(rawTime) then
-                settings.move_time = tonumber(rawTime)
-            end
-
-            config.save(settings)
-            return settings
         end
     end
 
