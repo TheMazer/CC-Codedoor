@@ -25,14 +25,31 @@ config.getFilePath = getFilePath
 local CONFIG_FILE = getFilePath("cdsettings.json")
 local STATE_FILE = getFilePath("gatestate.json")
 local LEGACY_CONFIG_FILE = getFilePath("cdsettings.cfg")
+local SERVER_CONFIG_FILE = getFilePath("cdserver.json")
 
 local settings = {
+    mode = "STANDALONE",
     password_hash = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
     salt = "",
     redstone_side = "bottom",
     move_time = 16,
     alarm_sound = true,
-    timeout = 300
+    timeout = 300,
+    sync = {
+        protocol = "codedoor_sync",
+        server_name = "GateServer",
+        modem_side = "auto",
+        timeout = 3
+    }
+}
+
+local serverSettings = {
+    protocol = "codedoor_sync",
+    hostname = "GateServer",
+    modem_side = "auto",
+    redstone_side = "bottom",
+    move_time = 16,
+    alarm_sound = true
 }
 
 function config.get()
@@ -48,6 +65,37 @@ function config.save(cfg)
     end
 end
 
+function config.getServerConfig()
+    return serverSettings
+end
+
+function config.saveServer(cfg)
+    cfg = cfg or serverSettings
+    local file = fs.open(SERVER_CONFIG_FILE, "w")
+    if file then
+        file.write(textutils.serializeJSON(cfg, false))
+        file.close()
+    end
+end
+
+function config.loadServer()
+    if fs.exists(SERVER_CONFIG_FILE) then
+        local file = fs.open(SERVER_CONFIG_FILE, "r")
+        if file then
+            local data = textutils.unserializeJSON(file.readAll())
+            file.close()
+            if type(data) == "table" then
+                for k, v in pairs(data) do
+                    serverSettings[k] = v
+                end
+                return serverSettings
+            end
+        end
+    end
+    config.saveServer(serverSettings)
+    return serverSettings
+end
+
 function config.load(sha256)
     if fs.exists(CONFIG_FILE) then
         local file = fs.open(CONFIG_FILE, "r")
@@ -56,7 +104,14 @@ function config.load(sha256)
             file.close()
             if type(data) == "table" then
                 for k, v in pairs(data) do
-                    settings[k] = v
+                    if k == "sync" and type(v) == "table" then
+                        settings.sync = settings.sync or {}
+                        for sk, sv in pairs(v) do
+                            settings.sync[sk] = sv
+                        end
+                    else
+                        settings[k] = v
+                    end
                 end
                 if data.password ~= nil then
                     if tostring(data.password) == "" then

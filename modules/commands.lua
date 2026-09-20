@@ -90,71 +90,107 @@ function commands.execute(command, ctx)
         print("   - Terminating gate controller interface.")
 
     elseif inTable(commandAliases["open"], command) then
-        if not state.gateOpened then
-            print("Gate opening sequence engaged.")
-            sleep(0.7)
-
-            print("Sequence in process...")
-            state.status = "Preparing..."
-            ctx.renderStatusBar()
-            hardware.startAlarm()
-            sleep(2)
-
-            state.status = "M O V I N G"
-            ctx.renderStatusBar()
-            hardware.playNote("basedrum", 3, 0)
-            sleep(0.1)
-            hardware.playNote("basedrum", 3, 2)
-            sleep(0.1)
-            hardware.setOutput(cfg.redstone_side, true)
-
-            sleep(cfg.move_time or 16)
-            hardware.stopAlarm()
-            hardware.playNote("basedrum", 3, 0)
-            sleep(0.1)
-            hardware.playNote("basedrum", 3, 2)
-
-            state.status = ""
-            state.gateOpened = true
-            ctx.config.saveGateState(true)
-            ctx.renderStatusBar()
-            print("Gate opened.")
+        if cfg.mode == "SYNC" then
+            if ctx.sync then
+                print("Sending open request to server...")
+                local ok, res = ctx.sync.requestOpen()
+                if ok then
+                    print(res and res.message or "Gate opening engaged on server.")
+                else
+                    outputFrame.setTextColor(colors.red)
+                    print("Error: " .. (res and res.message or "Failed to connect to server"))
+                    outputFrame.setTextColor(colors.white)
+                end
+            else
+                outputFrame.setTextColor(colors.red)
+                print("Error: Sync module not available.")
+                outputFrame.setTextColor(colors.white)
+            end
         else
-            print("Gate already opened.")
+            if not state.gateOpened then
+                print("Gate opening sequence engaged.")
+                sleep(0.7)
+
+                print("Sequence in process...")
+                state.status = "Preparing..."
+                ctx.renderStatusBar()
+                hardware.startAlarm()
+                sleep(2)
+
+                state.status = "M O V I N G"
+                ctx.renderStatusBar()
+                hardware.playNote("basedrum", 3, 0)
+                sleep(0.1)
+                hardware.playNote("basedrum", 3, 2)
+                sleep(0.1)
+                hardware.setOutput(cfg.redstone_side, true)
+
+                sleep(cfg.move_time or 16)
+                hardware.stopAlarm()
+                hardware.playNote("basedrum", 3, 0)
+                sleep(0.1)
+                hardware.playNote("basedrum", 3, 2)
+
+                state.status = ""
+                state.gateOpened = true
+                ctx.config.saveGateState(true)
+                ctx.renderStatusBar()
+                print("Gate opened.")
+            else
+                print("Gate already opened.")
+            end
         end
 
     elseif inTable(commandAliases["close"], command) then
-        if state.gateOpened then
-            print("Gate closing sequence engaged.")
-            sleep(0.7)
-
-            print("Sequence in process...")
-            state.status = "Preparing..."
-            ctx.renderStatusBar()
-            hardware.startAlarm()
-            sleep(2)
-
-            state.status = "M O V I N G"
-            ctx.renderStatusBar()
-            hardware.playNote("basedrum", 3, 0)
-            sleep(0.1)
-            hardware.playNote("basedrum", 3, 2)
-            sleep(0.1)
-            hardware.setOutput(cfg.redstone_side, false)
-
-            sleep(cfg.move_time or 16)
-            hardware.stopAlarm()
-            hardware.playNote("basedrum", 3, 0)
-            sleep(0.1)
-            hardware.playNote("basedrum", 3, 2)
-
-            state.status = ""
-            state.gateOpened = false
-            ctx.config.saveGateState(false)
-            ctx.renderStatusBar()
-            print("Gate closed.")
+        if cfg.mode == "SYNC" then
+            if ctx.sync then
+                print("Sending close request to server...")
+                local ok, res = ctx.sync.requestClose()
+                if ok then
+                    print(res and res.message or "Gate closing engaged on server.")
+                else
+                    outputFrame.setTextColor(colors.red)
+                    print("Error: " .. (res and res.message or "Failed to connect to server"))
+                    outputFrame.setTextColor(colors.white)
+                end
+            else
+                outputFrame.setTextColor(colors.red)
+                print("Error: Sync module not available.")
+                outputFrame.setTextColor(colors.white)
+            end
         else
-            print("Gate already closed.")
+            if state.gateOpened then
+                print("Gate closing sequence engaged.")
+                sleep(0.7)
+
+                print("Sequence in process...")
+                state.status = "Preparing..."
+                ctx.renderStatusBar()
+                hardware.startAlarm()
+                sleep(2)
+
+                state.status = "M O V I N G"
+                ctx.renderStatusBar()
+                hardware.playNote("basedrum", 3, 0)
+                sleep(0.1)
+                hardware.playNote("basedrum", 3, 2)
+                sleep(0.1)
+                hardware.setOutput(cfg.redstone_side, false)
+
+                sleep(cfg.move_time or 16)
+                hardware.stopAlarm()
+                hardware.playNote("basedrum", 3, 0)
+                sleep(0.1)
+                hardware.playNote("basedrum", 3, 2)
+
+                state.status = ""
+                state.gateOpened = false
+                ctx.config.saveGateState(false)
+                ctx.renderStatusBar()
+                print("Gate closed.")
+            else
+                print("Gate already closed.")
+            end
         end
 
     elseif inTable(commandAliases["passwd"], command) then

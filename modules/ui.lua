@@ -103,6 +103,12 @@ end
 function ui.renderStatusBar(statusText, gateOpened)
     if not statusBar then return end
 
+    local cur = term.current()
+    local curX, curY = cur.getCursorPos()
+    local curBlink = cur.getCursorBlink()
+    local curFg = cur.getTextColor()
+    local curBg = cur.getBackgroundColor()
+
     statusBar.setCursorPos(1, 1)
     statusBar.write(string.rep(" ", w - 2))
 
@@ -122,6 +128,11 @@ function ui.renderStatusBar(statusText, gateOpened)
             statusBar.write("Closed")
         end
     end
+
+    cur.setTextColor(curFg)
+    cur.setBackgroundColor(curBg)
+    cur.setCursorPos(curX, curY)
+    cur.setCursorBlink(curBlink)
 end
 
 function ui.renderScreen(authorized, statusText, gateOpened, timeout, remainingSeconds)

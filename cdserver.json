@@ -1,0 +1,8 @@
+{
+  "protocol": "codedoor_sync",
+  "hostname": "GateServer",
+  "modem_side": "auto",
+  "redstone_side": "bottom",
+  "move_time": 16,
+  "alarm_sound": true
+}

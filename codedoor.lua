@@ -17,6 +17,7 @@ local hardware = require("hardware")
 local ui = require("ui")
 local session = require("session")
 local commands = require("commands")
+local sync = require("sync")
 
 -- Load Configuration and Gate State
 local cfg = config.load(sha256)
@@ -28,8 +29,18 @@ local state = {
     status = ""
 }
 
--- Apply Saved Redstone Signal on Startup
-hardware.setOutput(cfg.redstone_side, state.gateOpened)
+-- Initialize Network Sync or Local Redstone
+if cfg.mode == "SYNC" then
+    sync.init(cfg)
+    local ok, res = sync.queryStatus()
+    if ok and res and res.opened ~= nil then
+        state.gateOpened = (res.opened == true)
+        state.status = res.status or ""
+    end
+else
+    -- Apply Saved Redstone Signal on Startup in STANDALONE mode
+    hardware.setOutput(cfg.redstone_side, state.gateOpened)
+end
 
 -- Initialize UI & Link Callbacks
 ui.setSoundCallback(hardware.playNote)
@@ -54,6 +65,8 @@ local ctx = {
     auth = auth,
     session = session,
     sha256 = sha256,
+    sync = sync,
+    cfg = cfg,
     state = state,
     renderScreen = renderScreen,
     renderStatusBar = renderStatusBar,
@@ -164,7 +177,20 @@ local function waitingForCommand()
     end
 end
 
+-- Background sync listener worker for SYNC mode
+local syncWorker = sync.createListenerWorker(function(opened, status)
+    if cfg.mode == "SYNC" then
+        state.gateOpened = (opened == true)
+        state.status = status or ""
+        renderStatusBar()
+    end
+end)
+
 -- Start Application
 renderScreen()
-parallel.waitForAny(waitingForCommand, hardware.alarmWorker, ui.instructionWorker, timerWorker)
+if cfg.mode == "SYNC" then
+    parallel.waitForAny(waitingForCommand, ui.instructionWorker, timerWorker, syncWorker)
+else
+    parallel.waitForAny(waitingForCommand, hardware.alarmWorker, ui.instructionWorker, timerWorker)
+end
 auth.restore()
