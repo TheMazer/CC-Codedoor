@@ -66,134 +66,160 @@ end
 
 -- Rendering page 1 of the command help manual
 local function renderHelpPage1(outputFrame, state)
+    local fw, fh = outputFrame.getSize()
     outputFrame.clear()
     outputFrame.setCursorPos(1, 1)
 
     outputFrame.setTextColor(colors.white)
     outputFrame.write("Gate Commands (1/2)")
 
-    outputFrame.setCursorPos(1, 2)
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(string.format("  %-9s", "open, o"))
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.char(26) .. " ")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Open gate ")
-    if state.gateOpened then
-        outputFrame.setTextColor(colors.gray)
-        outputFrame.write("[OPEN]")
-    else
-        outputFrame.setTextColor(colors.lime)
-        outputFrame.write("[READY]")
+    local items = {
+        { cmd = "open, o", desc = "Open gate ", state = state.gateOpened and "[OPEN]" or "[READY]", stateColor = state.gateOpened and colors.gray or colors.lime },
+        { cmd = "close, c", desc = "Close gate ", state = state.gateOpened and "[READY]" or "[CLOSED]", stateColor = state.gateOpened and colors.lime or colors.gray },
+        { cmd = "config", desc = "Settings (cdsettings.json)" },
+        { cmd = "passwd", desc = "Change gate password" }
+    }
+
+    local maxCmdLen = 0
+    for _, item in ipairs(items) do
+        if #item.cmd > maxCmdLen then
+            maxCmdLen = #item.cmd
+        end
+    end
+    local arrowCol = math.min(fw - 8, maxCmdLen + 4)
+
+    for i, item in ipairs(items) do
+        local y = i + 1
+        if y < fh - 1 then
+            outputFrame.setCursorPos(3, y)
+            outputFrame.setTextColor(colors.white)
+            outputFrame.write(item.cmd)
+
+            outputFrame.setCursorPos(arrowCol, y)
+            outputFrame.setTextColor(colors.gray)
+            outputFrame.write(string.char(26) .. " ")
+
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write(item.desc)
+
+            if item.state then
+                outputFrame.setTextColor(item.stateColor)
+                outputFrame.write(item.state)
+            end
+        end
     end
 
-    outputFrame.setCursorPos(1, 3)
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(string.format("  %-9s", "close, c"))
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.char(26) .. " ")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Close gate ")
-    if not state.gateOpened then
-        outputFrame.setTextColor(colors.gray)
-        outputFrame.write("[CLOSED]")
-    else
-        outputFrame.setTextColor(colors.lime)
-        outputFrame.write("[READY]")
+    local hintY = fh - 2
+    if hintY > #items + 1 then
+        if fw >= 42 then
+            outputFrame.setCursorPos(3, hintY)
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write(string.char(16) .. " Type 'help <cmd>' for command details")
+        elseif fw >= 25 then
+            outputFrame.setCursorPos(3, hintY)
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write(string.char(16) .. " 'help <cmd>' for details")
+        end
     end
 
-    outputFrame.setCursorPos(1, 4)
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(string.format("  %-9s", "config"))
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.char(26) .. " ")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Settings (cdsettings.json)")
+    if fh > 1 then
+        outputFrame.setCursorPos(1, fh - 1)
+        outputFrame.setTextColor(colors.gray)
+        outputFrame.write(string.rep("-", math.max(1, fw - 1)))
+    end
 
-    outputFrame.setCursorPos(1, 5)
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(string.format("  %-9s", "passwd"))
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.char(26) .. " ")
+    outputFrame.setCursorPos(1, fh)
     outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Change gate password")
-
-    outputFrame.setCursorPos(1, 6)
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("  " .. string.char(16) .. " Type 'help <cmd>' for command details")
-
-    outputFrame.setCursorPos(1, 7)
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.rep("-", 44))
-
-    outputFrame.setCursorPos(1, 8)
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Page 1/2 " .. string.char(175) .. " Type ")
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write("'help 2'")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write(" for next page")
+    if fw >= 38 then
+        outputFrame.write("Page 1/2 " .. string.char(175) .. " Type ")
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("'help 2'")
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write(" for next page")
+    else
+        outputFrame.write("[1/2] Type ")
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("'help 2'")
+    end
 end
 
 -- Rendering page 2 of the command help manual
 local function renderHelpPage2(outputFrame)
+    local fw, fh = outputFrame.getSize()
     outputFrame.clear()
     outputFrame.setCursorPos(1, 1)
 
     outputFrame.setTextColor(colors.white)
     outputFrame.write("Session & Shell Commands (2/2)")
 
-    outputFrame.setCursorPos(1, 2)
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(string.format("  %-11s", "logout, l"))
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.char(26) .. " ")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Lock console & log off")
+    local items = {
+        { cmd = "logout, l", desc = "Lock console & log off" },
+        { cmd = "clear, cls", desc = "Clear terminal output" },
+        { cmd = "exit", desc = "Exit controller interface" },
+        { cmd = "help, man", desc = "Show command manual" }
+    }
 
-    outputFrame.setCursorPos(1, 3)
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(string.format("  %-11s", "clear, cls"))
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.char(26) .. " ")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Clear terminal output")
+    local maxCmdLen = 0
+    for _, item in ipairs(items) do
+        if #item.cmd > maxCmdLen then
+            maxCmdLen = #item.cmd
+        end
+    end
+    local arrowCol = math.min(fw - 8, maxCmdLen + 4)
 
-    outputFrame.setCursorPos(1, 4)
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(string.format("  %-11s", "exit"))
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.char(26) .. " ")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Exit controller interface")
+    for i, item in ipairs(items) do
+        local y = i + 1
+        if y < fh - 1 then
+            outputFrame.setCursorPos(3, y)
+            outputFrame.setTextColor(colors.white)
+            outputFrame.write(item.cmd)
 
-    outputFrame.setCursorPos(1, 5)
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(string.format("  %-11s", "help, man"))
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.char(26) .. " ")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Show command manual")
+            outputFrame.setCursorPos(arrowCol, y)
+            outputFrame.setTextColor(colors.gray)
+            outputFrame.write(string.char(26) .. " ")
 
-    outputFrame.setCursorPos(1, 6)
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("  " .. string.char(16) .. " Run 'config' to inspect cdsettings.json")
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write(item.desc)
+        end
+    end
 
-    outputFrame.setCursorPos(1, 7)
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.rep("-", 44))
+    local hintY = fh - 2
+    if hintY > #items + 1 then
+        if fw >= 42 then
+            outputFrame.setCursorPos(3, hintY)
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write(string.char(16) .. " Run 'config' to inspect cdsettings.json")
+        elseif fw >= 25 then
+            outputFrame.setCursorPos(3, hintY)
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write(string.char(16) .. " 'config' for settings")
+        end
+    end
 
-    outputFrame.setCursorPos(1, 8)
+    if fh > 1 then
+        outputFrame.setCursorPos(1, fh - 1)
+        outputFrame.setTextColor(colors.gray)
+        outputFrame.write(string.rep("-", math.max(1, fw - 1)))
+    end
+
+    outputFrame.setCursorPos(1, fh)
     outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Page 2/2 " .. string.char(175) .. " Type ")
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write("'help 1'")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write(" for first page")
+    if fw >= 38 then
+        outputFrame.write("Page 2/2 " .. string.char(175) .. " Type ")
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("'help 1'")
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write(" for first page")
+    else
+        outputFrame.write("[2/2] Type ")
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("'help 1'")
+    end
 end
 
 -- Rendering targeted command manual entry
 local function renderHelpCommand(outputFrame, targetCmd, state)
+    local fw, fh = outputFrame.getSize()
     outputFrame.clear()
     outputFrame.setCursorPos(1, 1)
 
@@ -215,7 +241,7 @@ local function renderHelpCommand(outputFrame, targetCmd, state)
         outputFrame.write("Keys: mode, redstone, move, alarm, timeout,")
         outputFrame.setCursorPos(1, 7)
         outputFrame.write("      server, proto, modem, sync_timeout")
-        outputFrame.setCursorPos(1, 8)
+        outputFrame.setCursorPos(1, fh)
         outputFrame.setTextColor(colors.white)
         outputFrame.write("Tip: 'set <k> <v>' works as shorthand")
 
@@ -240,10 +266,10 @@ local function renderHelpCommand(outputFrame, targetCmd, state)
             outputFrame.setTextColor(colors.red)
             outputFrame.write("CLOSED")
         end
-        outputFrame.setCursorPos(1, 7)
+        outputFrame.setCursorPos(1, fh - 1)
         outputFrame.setTextColor(colors.gray)
-        outputFrame.write(string.rep("-", 44))
-        outputFrame.setCursorPos(1, 8)
+        outputFrame.write(string.rep("-", math.max(10, fw - 1)))
+        outputFrame.setCursorPos(1, fh)
         outputFrame.setTextColor(colors.lightGray)
         outputFrame.write("Run 'close' to shut the gate")
 
@@ -268,10 +294,10 @@ local function renderHelpCommand(outputFrame, targetCmd, state)
             outputFrame.setTextColor(colors.red)
             outputFrame.write("CLOSED")
         end
-        outputFrame.setCursorPos(1, 7)
+        outputFrame.setCursorPos(1, fh - 1)
         outputFrame.setTextColor(colors.gray)
-        outputFrame.write(string.rep("-", 44))
-        outputFrame.setCursorPos(1, 8)
+        outputFrame.write(string.rep("-", math.max(10, fw - 1)))
+        outputFrame.setCursorPos(1, fh)
         outputFrame.setTextColor(colors.lightGray)
         outputFrame.write("Run 'open' to open the gate")
 
@@ -289,10 +315,10 @@ local function renderHelpCommand(outputFrame, targetCmd, state)
         outputFrame.write("  " .. string.char(7) .. " Confirm new password to apply")
         outputFrame.setCursorPos(1, 6)
         outputFrame.write("  " .. string.char(7) .. " Empty password disables auth & login")
-        outputFrame.setCursorPos(1, 7)
+        outputFrame.setCursorPos(1, fh - 1)
         outputFrame.setTextColor(colors.gray)
-        outputFrame.write(string.rep("-", 44))
-        outputFrame.setCursorPos(1, 8)
+        outputFrame.write(string.rep("-", math.max(10, fw - 1)))
+        outputFrame.setCursorPos(1, fh)
         outputFrame.setTextColor(colors.lightGray)
         outputFrame.write("Changes save directly to cdsettings.json")
 
@@ -308,10 +334,10 @@ local function renderHelpCommand(outputFrame, targetCmd, state)
         outputFrame.write("returns to the password entry screen.")
         outputFrame.setCursorPos(1, 5)
         outputFrame.write("If no password is set, login is bypassed.")
-        outputFrame.setCursorPos(1, 7)
+        outputFrame.setCursorPos(1, fh - 1)
         outputFrame.setTextColor(colors.gray)
-        outputFrame.write(string.rep("-", 44))
-        outputFrame.setCursorPos(1, 8)
+        outputFrame.write(string.rep("-", math.max(10, fw - 1)))
+        outputFrame.setCursorPos(1, fh)
         outputFrame.setTextColor(colors.lightGray)
         outputFrame.write("Use 'passwd' to set an access password")
 
@@ -362,6 +388,7 @@ end
 
 -- Running interactive paging navigation mode
 local function runInteractiveHelp(outputFrame, state)
+    local fw, fh = outputFrame.getSize()
     local curPage = 1
     local function renderCurrent()
         if curPage == 1 then
@@ -369,13 +396,20 @@ local function runInteractiveHelp(outputFrame, state)
         else
             renderHelpPage2(outputFrame)
         end
-        outputFrame.setCursorPos(1, 8)
-        outputFrame.write(string.rep(" ", 44))
-        outputFrame.setCursorPos(1, 8)
+        outputFrame.setCursorPos(1, fh)
+        outputFrame.write(string.rep(" ", fw))
+        outputFrame.setCursorPos(1, fh)
         outputFrame.setTextColor(colors.white)
         outputFrame.write("[" .. curPage .. "/2] ")
         outputFrame.setTextColor(colors.lightGray)
-        outputFrame.write("Space/Arrows: flip " .. string.char(179) .. " Enter: ready")
+        local hint = "Space/Arrows: flip " .. string.char(179) .. " Enter: ready"
+        if #hint + 8 > fw then
+            hint = "Space: flip " .. string.char(179) .. " Enter: ok"
+        end
+        if #hint + 8 > fw then
+            hint = "Space: flip"
+        end
+        outputFrame.write(hint)
     end
 
     renderCurrent()
@@ -383,7 +417,10 @@ local function runInteractiveHelp(outputFrame, state)
     local timerId = os.startTimer(15)
     while true do
         local event, p1 = os.pullEvent()
-        if event == "timer" and p1 == timerId then
+        if event == "term_resize" then
+            fw, fh = outputFrame.getSize()
+            renderCurrent()
+        elseif event == "timer" and p1 == timerId then
             break
         elseif event == "key" then
             if p1 == keys.space or p1 == keys.pageDown or p1 == keys.down or p1 == keys.right then
@@ -401,68 +438,98 @@ end
 
 -- Rendering configuration overview table
 local function renderConfigList(outputFrame, cfg)
+    local fw, fh = outputFrame.getSize()
     outputFrame.clear()
     outputFrame.setCursorPos(1, 1)
 
     outputFrame.setTextColor(colors.white)
-    outputFrame.write("Configuration (cdsettings.json)")
+    outputFrame.write(fw >= 32 and "Configuration (cdsettings.json)" or "Configuration")
 
-    outputFrame.setCursorPos(1, 2)
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("mode: ")
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(string.format("%-11s", tostring(cfg.mode)))
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("alarm: ")
-    outputFrame.setTextColor(cfg.alarm_sound and colors.lime or colors.red)
-    outputFrame.write(tostring(cfg.alarm_sound == true))
+    local col1 = 3
+    local twoColumn = (fw >= 36)
+    local col2 = math.floor(fw / 2) + 3
 
-    outputFrame.setCursorPos(1, 3)
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("redstone: ")
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(string.format("%-7s", tostring(cfg.redstone_side or "bottom")))
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("timeout: ")
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write((cfg.timeout or 0) .. "s")
+    -- Defining paired settings rows
+    local pairsList = {
+        {
+            { label = "mode", val = tostring(cfg.mode or "STANDALONE"), valColor = colors.white },
+            { label = "alarm", val = tostring(cfg.alarm_sound == true), valColor = cfg.alarm_sound and colors.lime or colors.red }
+        },
+        {
+            { label = "redstone", val = tostring(cfg.redstone_side or "bottom"), valColor = colors.white },
+            { label = "timeout", val = (cfg.timeout or 0) .. "s", valColor = colors.white }
+        },
+        {
+            { label = "move_time", val = (cfg.move_time or 16) .. "s", valColor = colors.white },
+            { label = "modem", val = tostring(cfg.sync and cfg.sync.modem_side or "auto"), valColor = colors.white }
+        },
+        {
+            { label = "server", val = tostring(cfg.sync and cfg.sync.server_name or "None"), valColor = colors.white },
+            { label = "sync.t/o", val = (cfg.sync and cfg.sync.timeout or 3) .. "s", valColor = colors.white }
+        },
+        {
+            { label = "protocol", val = tostring(cfg.sync and cfg.sync.protocol or "None"), valColor = colors.white },
+            nil
+        }
+    }
 
-    outputFrame.setCursorPos(1, 4)
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("move_time: ")
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write((cfg.move_time or 16) .. "s")
+    for r, row in ipairs(pairsList) do
+        local y = r + 1
+        if y < fh - 1 then
+            local item1 = row[1]
+            if item1 then
+                outputFrame.setCursorPos(col1, y)
+                outputFrame.setTextColor(colors.lightGray)
+                outputFrame.write(item1.label .. ": ")
+                outputFrame.setTextColor(item1.valColor)
+                local maxLen1 = twoColumn and math.max(4, col2 - col1 - #item1.label - 3) or math.max(4, fw - col1 - #item1.label - 2)
+                local valStr1 = #item1.val > maxLen1 and item1.val:sub(1, maxLen1) or item1.val
+                outputFrame.write(valStr1)
+            end
 
-    outputFrame.setCursorPos(1, 5)
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("sync.server: ")
-    outputFrame.setTextColor(colors.white)
-    local sName = tostring(cfg.sync and cfg.sync.server_name or "None")
-    outputFrame.write(string.format("%-6s", sName:sub(1, 6)))
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("modem: ")
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(tostring(cfg.sync and cfg.sync.modem_side or "auto"))
+            local item2 = row[2]
+            if twoColumn and item2 then
+                outputFrame.setCursorPos(col2, y)
+                outputFrame.setTextColor(colors.lightGray)
+                outputFrame.write(item2.label .. ": ")
+                outputFrame.setTextColor(item2.valColor)
+                local maxLen2 = math.max(4, fw - col2 - #item2.label - 2)
+                local valStr2 = #item2.val > maxLen2 and item2.val:sub(1, maxLen2) or item2.val
+                outputFrame.write(valStr2)
+            end
+        end
+    end
 
-    outputFrame.setCursorPos(1, 6)
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("sync.proto:  ")
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write(tostring(cfg.sync and cfg.sync.protocol or "None") .. " ")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("(" .. (cfg.sync and cfg.sync.timeout or 3) .. "s)")
+    local divY = fh - 1
+    local footY = fh
+    if fh < 8 then
+        divY = math.min(fh - 1, #pairsList + 2)
+        footY = divY + 1
+    end
 
-    outputFrame.setCursorPos(1, 7)
-    outputFrame.setTextColor(colors.gray)
-    outputFrame.write(string.rep("-", 44))
+    if divY > 1 and divY <= fh then
+        outputFrame.setCursorPos(1, divY)
+        outputFrame.setTextColor(colors.gray)
+        outputFrame.write(string.rep("-", math.max(1, fw - 1)))
+    end
 
-    outputFrame.setCursorPos(1, 8)
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write("Use: ")
-    outputFrame.setTextColor(colors.white)
-    outputFrame.write("config set <key> <val>")
-    outputFrame.setTextColor(colors.lightGray)
-    outputFrame.write(" " .. string.char(175) .. " 'help config'")
+    if footY <= fh then
+        outputFrame.setCursorPos(1, footY)
+        outputFrame.setTextColor(colors.lightGray)
+        if fw >= 42 then
+            outputFrame.write("Use: ")
+            outputFrame.setTextColor(colors.white)
+            outputFrame.write("config set <key> <val>")
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write(" " .. string.char(175) .. " ")
+            outputFrame.setTextColor(colors.white)
+            outputFrame.write("'help config'")
+        elseif fw >= 24 then
+            outputFrame.write("Set: ")
+            outputFrame.setTextColor(colors.white)
+            outputFrame.write("cfg set <k> <v>")
+        end
+    end
 end
 
 -- Handling configuration inspect and mutate operations

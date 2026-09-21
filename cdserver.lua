@@ -632,6 +632,15 @@ local function inputWorker()
             -- dir == 1: wheel down -> scroll down -> decrease scrollOffset
             scrollOffset = math.max(0, math.min(maxOffset, scrollOffset - dir * 2))
             renderConsole()
+        elseif event == "term_resize" then
+            w, h = term.getSize()
+            consoleHeight = math.max(1, h - 5)
+            consoleWin.reposition(1, 4, w, consoleHeight)
+            statusWin.reposition(1, h - 1, w, 1)
+            renderHeader()
+            renderFooter()
+            renderStatusLine()
+            renderConsole()
         end
     end
 end

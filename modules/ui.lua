@@ -33,16 +33,19 @@ function ui.init()
     term.clear()
     w, h = term.getSize()
 
-    -- Program Title
-    paintutils.drawFilledBox(1, 1, w, 3, colors.yellow)
-    term.setCursorPos(3, 2)
-    term.setTextColor(colors.black)
-    term.setBackgroundColor(colors.yellow)
-    term.write("Gate Controller")
-
     -- Setting up Main Frames
     parentScreen = term.current()
-    frame = window.create(parentScreen, 2, 5, w - 2, h - 6)
+    paintutils.drawFilledBox(1, 1, w, 3, colors.yellow)
+    parentScreen.setCursorPos(3, 2)
+    parentScreen.setTextColor(colors.black)
+    parentScreen.setBackgroundColor(colors.yellow)
+    if w >= 17 then
+        parentScreen.write("Gate Controller")
+    elseif w >= 6 then
+        parentScreen.write("Gate")
+    end
+
+    frame = window.create(parentScreen, 2, 5, math.max(1, w - 2), math.max(1, h - 6))
     statusBar = window.create(parentScreen, 1, h, w, 1)
 
     statusBar.setBackgroundColor(colors.gray)
@@ -69,6 +72,29 @@ function ui.getSize()
     return w, h
 end
 
+function ui.resize()
+    w, h = term.getSize()
+    if parentScreen then
+        parentScreen.setBackgroundColor(colors.black)
+        parentScreen.clear()
+        paintutils.drawFilledBox(1, 1, w, 3, colors.yellow)
+        parentScreen.setCursorPos(3, 2)
+        parentScreen.setTextColor(colors.black)
+        parentScreen.setBackgroundColor(colors.yellow)
+        if w >= 17 then
+            parentScreen.write("Gate Controller")
+        elseif w >= 6 then
+            parentScreen.write("Gate")
+        end
+    end
+    if frame then
+        frame.reposition(2, 5, math.max(1, w - 2), math.max(1, h - 6))
+    end
+    if statusBar then
+        statusBar.reposition(1, h, w, 1)
+    end
+end
+
 function ui.renderSessionTimer(authorized, timeout, remainingSeconds)
     if not parentScreen then return end
 
@@ -81,9 +107,13 @@ function ui.renderSessionTimer(authorized, timeout, remainingSeconds)
     parentScreen.setCursorBlink(false)
     parentScreen.setBackgroundColor(colors.yellow)
 
+    local pW, _ = parentScreen.getSize()
+    local timerBoxWidth = 8
+    local timerBoxStart = math.max(1, pW - timerBoxWidth)
+
     if authorized and timeout and timeout > 0 and remainingSeconds then
         local str = tostring(math.max(0, remainingSeconds)) .. "s"
-        local x = w - #str - 1
+        local x = pW - #str - 1
 
         if remainingSeconds <= 10 then
             parentScreen.setTextColor(colors.red)
@@ -91,14 +121,16 @@ function ui.renderSessionTimer(authorized, timeout, remainingSeconds)
             parentScreen.setTextColor(colors.black)
         end
 
-        parentScreen.setCursorPos(w - 8, 2)
-        parentScreen.write(string.rep(" ", 8))
+        parentScreen.setCursorPos(timerBoxStart, 2)
+        parentScreen.write(string.rep(" ", timerBoxWidth))
 
-        parentScreen.setCursorPos(x, 2)
-        parentScreen.write(str)
+        if x >= 1 then
+            parentScreen.setCursorPos(x, 2)
+            parentScreen.write(str)
+        end
     else
-        parentScreen.setCursorPos(w - 8, 2)
-        parentScreen.write(string.rep(" ", 8))
+        parentScreen.setCursorPos(timerBoxStart, 2)
+        parentScreen.write(string.rep(" ", timerBoxWidth))
     end
 
     cur.setTextColor(curFg)
@@ -115,6 +147,8 @@ function ui.renderStatusBar(statusText, gateOpened, netOnline, blinkTick, mode)
     if netOnline ~= nil then currentNetOnline = (netOnline == true) end
     if blinkTick ~= nil then currentBlink = (blinkTick == true) end
     if mode ~= nil then currentMode = mode end
+
+    local sbW, _ = statusBar.getSize()
 
     local cur = term.current()
     local curX, curY = cur.getCursorPos()
@@ -155,54 +189,57 @@ function ui.renderStatusBar(statusText, gateOpened, netOnline, blinkTick, mode)
     statusBar.write(dotChar)
 
     statusBar.setTextColor(colors.white)
-    statusBar.write(" Gate: ")
+    statusBar.write(sbW >= 32 and " Gate: " or " ")
     statusBar.setTextColor(gateTextColor)
     statusBar.write(gateText .. " ")
 
     -- Transition 1: Segment 1 (gray) -> Segment 2 (black)
-    statusBar.setTextColor(colors.gray)
-    statusBar.setBackgroundColor(colors.black)
-    statusBar.write(string.char(157))
+    local curBarX, _ = statusBar.getCursorPos()
+    if curBarX < sbW - 5 then
+        statusBar.setTextColor(colors.gray)
+        statusBar.setBackgroundColor(colors.black)
+        statusBar.write(string.char(157))
 
-    -- Segment 2: Network / Mode Status (Background: colors.black)
-    statusBar.setBackgroundColor(colors.black)
-    statusBar.write(" ")
+        -- Segment 2: Network / Mode Status (Background: colors.black)
+        statusBar.setBackgroundColor(colors.black)
+        statusBar.write(" ")
 
-    local netDotColor = colors.lime
-    local netLabel = " Network: "
-    local netStatusText = "Online "
-    local netStatusColor = colors.lime
+        local netDotColor = colors.lime
+        local netLabel = sbW >= 42 and " Network: " or " "
+        local netStatusText = "Online "
+        local netStatusColor = colors.lime
 
-    if currentMode == "STANDALONE" then
-        netDotColor = colors.lightGray
-        netLabel = " Mode: "
-        netStatusText = "Standalone "
-        netStatusColor = colors.lightGray
-    elseif not currentNetOnline then
-        netDotColor = colors.red
-        netLabel = " Network: "
-        netStatusText = "Offline "
-        netStatusColor = colors.red
+        if currentMode == "STANDALONE" then
+            netDotColor = colors.lightGray
+            netLabel = sbW >= 42 and " Mode: " or " "
+            netStatusText = sbW >= 32 and "Standalone " or "Local "
+            netStatusColor = colors.lightGray
+        elseif not currentNetOnline then
+            netDotColor = colors.red
+            netLabel = sbW >= 42 and " Network: " or " "
+            netStatusText = "Offline "
+            netStatusColor = colors.red
+        end
+
+        statusBar.setTextColor(netDotColor)
+        statusBar.write(dotChar)
+
+        statusBar.setTextColor(colors.white)
+        statusBar.write(netLabel)
+        statusBar.setTextColor(netStatusColor)
+        statusBar.write(netStatusText)
+
+        -- Transition 2: Segment 2 (black) -> Segment 3 (gray)
+        statusBar.setTextColor(colors.black)
+        statusBar.setBackgroundColor(colors.gray)
+        statusBar.write(string.char(157))
     end
 
-    statusBar.setTextColor(netDotColor)
-    statusBar.write(dotChar)
-
-    statusBar.setTextColor(colors.white)
-    statusBar.write(netLabel)
-    statusBar.setTextColor(netStatusColor)
-    statusBar.write(netStatusText)
-
-    -- Transition 2: Segment 2 (black) -> Segment 3 (gray)
-    statusBar.setTextColor(colors.black)
-    statusBar.setBackgroundColor(colors.gray)
-    statusBar.write(string.char(157))
-
     -- Segment 3: System Time / Spacer (Background: colors.gray)
-    local curBarX, _ = statusBar.getCursorPos()
+    curBarX, _ = statusBar.getCursorPos()
     local timeStr = textutils.formatTime(os.time(), true)
     local rightStr = " " .. timeStr .. " "
-    local remaining = w - curBarX + 1
+    local remaining = sbW - curBarX + 1
 
     statusBar.setBackgroundColor(colors.gray)
     if remaining >= #rightStr then
@@ -226,6 +263,7 @@ function ui.renderScreen(authorized, statusText, gateOpened, timeout, remainingS
     if not frame or not statusBar then return end
 
     frame.clear()
+    local fw, _ = frame.getSize()
 
     if authorized then
         frame.setCursorPos(1, 1)
@@ -234,13 +272,27 @@ function ui.renderScreen(authorized, statusText, gateOpened, timeout, remainingS
 
         frame.setCursorPos(1, 2)
         frame.setTextColor(colors.white)
-        frame.write("You can now operate the Gate")
+        if fw >= 28 then
+            frame.write("You can now operate the Gate")
+        else
+            frame.write("Operate gate below")
+        end
     else
         frame.setTextColor(colors.white)
         frame.setCursorPos(1, 1)
-        frame.write("Authorization is required to operate this gate")
-        frame.setCursorPos(1, 2)
-        frame.write("To continue, enter the password below")
+        if fw >= 46 then
+            frame.write("Authorization is required to operate this gate")
+            frame.setCursorPos(1, 2)
+            frame.write("To continue, enter the password below")
+        elseif fw >= 24 then
+            frame.write("Authorization required")
+            frame.setCursorPos(1, 2)
+            frame.write("Enter password below")
+        else
+            frame.write("Auth required")
+            frame.setCursorPos(1, 2)
+            frame.write("Enter password")
+        end
     end
 
     ui.renderStatusBar(statusText, gateOpened, netOnline, blinkTick, mode)
@@ -255,7 +307,10 @@ function ui.drawPromptArrow(color)
 end
 
 function ui.createOutputFrame()
-    local outputFrame = window.create(frame, 3, 6, w - 5, h - 11)
+    local fw, fh = frame.getSize()
+    local outW = math.max(1, fw - 3)
+    local outH = math.max(1, fh - 5)
+    local outputFrame = window.create(frame, 3, 6, outW, outH)
     outputFrame.clear()
     return outputFrame
 end
@@ -293,14 +348,17 @@ function ui.instructionWorker()
                 local curBlink = frame.getCursorBlink()
                 local curColor = frame.getTextColor()
 
-                frame.setCursorBlink(false)
-                frame.setCursorPos(i, 2)
-                frame.setTextColor(colors.white)
-                frame.write(text:sub(i, i))
+                local fw, _ = frame.getSize()
+                if i <= fw then
+                    frame.setCursorBlink(false)
+                    frame.setCursorPos(i, 2)
+                    frame.setTextColor(colors.white)
+                    frame.write(text:sub(i, i))
 
-                frame.setTextColor(curColor)
-                frame.setCursorPos(curX, curY)
-                frame.setCursorBlink(curBlink)
+                    frame.setTextColor(curColor)
+                    frame.setCursorPos(curX, curY)
+                    frame.setCursorBlink(curBlink)
+                end
 
                 sleep(0.04)
             end

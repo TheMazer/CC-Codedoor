@@ -106,12 +106,12 @@ local timerWorker = session.createTimerWorker(
 -- Main Command and Authorization Loop
 local function waitingForCommand()
     local frame = ui.getFrame()
-    local w, _ = ui.getSize()
 
     while true do
+        local fw, _ = frame.getSize()
         if state.authorized then
             frame.setCursorPos(1, 4)
-            frame.write(string.rep(" ", w - 2))
+            frame.write(string.rep(" ", fw))
 
             frame.setCursorPos(1, 4)
             frame.setTextColor(colors.lightGray)
@@ -146,7 +146,7 @@ local function waitingForCommand()
             end
         else
             frame.setCursorPos(1, 4)
-            frame.write(string.rep(" ", w - 2))
+            frame.write(string.rep(" ", fw))
 
             frame.setCursorPos(1, 4)
             frame.setTextColor(colors.lightGray)
@@ -173,7 +173,7 @@ local function waitingForCommand()
                 ui.queueInstruction("You can now operate the Gate")
             else
                 frame.setCursorPos(1, 4)
-                frame.write(string.rep(" ", w - 2))
+                frame.write(string.rep(" ", fw))
                 frame.setCursorPos(1, 4)
 
                 frame.setTextColor(colors.red)
@@ -215,12 +215,21 @@ local function statusTickerWorker()
     end
 end
 
+-- Background terminal resize worker
+local function resizeWorker()
+    while true do
+        os.pullEvent("term_resize")
+        ui.resize()
+        renderScreen()
+    end
+end
+
 -- Start Application
 renderScreen()
 if cfg.mode == "SYNC" then
-    parallel.waitForAny(waitingForCommand, ui.instructionWorker, timerWorker, syncWorker, statusTickerWorker)
+    parallel.waitForAny(waitingForCommand, ui.instructionWorker, timerWorker, syncWorker, statusTickerWorker, resizeWorker)
 else
-    parallel.waitForAny(waitingForCommand, hardware.alarmWorker, ui.instructionWorker, timerWorker, statusTickerWorker)
+    parallel.waitForAny(waitingForCommand, hardware.alarmWorker, ui.instructionWorker, timerWorker, statusTickerWorker, resizeWorker)
 end
 auth.restore()
 hardware.restorePalette()
