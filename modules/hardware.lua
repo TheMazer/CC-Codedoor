@@ -72,6 +72,7 @@ end
 function hardware.restorePalette()
     if term.nativePaletteColor then
         term.setPaletteColor(colors.orange, term.nativePaletteColor(colors.orange))
+        term.setPaletteColor(colors.red, term.nativePaletteColor(colors.red))
     end
 end
 

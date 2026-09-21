@@ -26,6 +26,7 @@ function ui.init()
     term.setPaletteColor(colors.lightGray, 0xB2B2B2)
     term.setPaletteColor(colors.gray, 0x404040)
     term.setPaletteColor(colors.black, 0x1E1E1E)
+    term.setPaletteColor(colors.red, 0xFF453A)
 
     -- Screen Setup
     term.setBackgroundColor(colors.black)
@@ -41,7 +42,7 @@ function ui.init()
 
     -- Setting up Main Frames
     parentScreen = term.current()
-    frame = window.create(parentScreen, 2, 5, w - 2, h - 5)
+    frame = window.create(parentScreen, 2, 5, w - 2, h - 6)
     statusBar = window.create(parentScreen, 1, h, w, 1)
 
     statusBar.setBackgroundColor(colors.gray)
@@ -246,16 +247,15 @@ function ui.renderScreen(authorized, statusText, gateOpened, timeout, remainingS
     ui.renderSessionTimer(authorized, timeout, remainingSeconds)
 end
 
-function ui.drawPromptArrow()
+function ui.drawPromptArrow(color)
     if not frame then return end
     frame.setCursorPos(1, 6)
-    frame.setTextColor(colors.yellow)
-    frame.write("> ")
-    frame.setTextColor(colors.white)
+    frame.setTextColor(color or colors.white)
+    frame.write(string.char(16) .. " ")
 end
 
 function ui.createOutputFrame()
-    local outputFrame = window.create(frame, 3, 6, w - 5, h - 10)
+    local outputFrame = window.create(frame, 3, 6, w - 5, h - 11)
     outputFrame.clear()
     return outputFrame
 end

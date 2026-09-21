@@ -1,16 +1,19 @@
 -- commands.lua - Command Registry and Execution Module
 local commands = {}
 
+-- Defining command alias mappings for console input
 local commandAliases = {
-    ["help"] = {"help", "?", "commands", "list"},
+    ["help"] = {"help", "?", "commands", "list", "man"},
     ["open"] = {"open", "o"},
     ["close"] = {"close", "c"},
     ["clear"] = {"clear", "cls"},
     ["passwd"] = {"passwd", "password", "changepass", "chpass"},
     ["logout"] = {"logout", "logoff", "l"},
-    ["exit"] = {"exit", "terminate"}
+    ["exit"] = {"exit", "terminate"},
+    ["config"] = {"config", "cfg", "settings", "setting", "set", "get"}
 }
 
+-- Checking if an element exists in the given table
 local function inTable(tab, val)
     if not tab then return false end
     for _, value in ipairs(tab) do
@@ -21,75 +24,777 @@ local function inTable(tab, val)
     return false
 end
 
-function commands.isCommand(aliasCategory, command)
-    return inTable(commandAliases[aliasCategory], command)
+-- Tokenizing the input command line into command name and argument list
+local function parseCommandLine(input)
+    local tokens = {}
+    for word in (input or ""):gmatch("%S+") do
+        table.insert(tokens, word)
+    end
+    local cmd = (tokens[1] or ""):lower()
+    local args = {}
+    for i = 2, #tokens do
+        table.insert(args, tokens[i])
+    end
+    return cmd, args
 end
 
+-- Normalizing configuration key names to canonical identifiers
+local function normalizeConfigKey(key)
+    if not key then return nil end
+    local k = key:lower()
+    if k == "mode" then
+        return "mode"
+    elseif k == "redstone" or k == "side" or k == "redstone_side" then
+        return "redstone_side"
+    elseif k == "move" or k == "movetime" or k == "move_time" then
+        return "move_time"
+    elseif k == "alarm" or k == "alarm_sound" or k == "alarmsound" then
+        return "alarm_sound"
+    elseif k == "timeout" or k == "session_timeout" then
+        return "timeout"
+    elseif k == "server" or k == "server_name" or k == "sync.server_name" or k == "sync.server" then
+        return "sync.server_name"
+    elseif k == "proto" or k == "protocol" or k == "sync.protocol" or k == "sync.proto" then
+        return "sync.protocol"
+    elseif k == "modem" or k == "modem_side" or k == "sync.modem_side" or k == "sync.modem" then
+        return "sync.modem_side"
+    elseif k == "sync_timeout" or k == "sync.timeout" then
+        return "sync.timeout"
+    end
+    return nil
+end
+
+-- Rendering page 1 of the command help manual
+local function renderHelpPage1(outputFrame, state)
+    outputFrame.clear()
+    outputFrame.setCursorPos(1, 1)
+
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write("Gate Commands (1/2)")
+
+    outputFrame.setCursorPos(1, 2)
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(string.format("  %-9s", "open, o"))
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.char(26) .. " ")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Open gate ")
+    if state.gateOpened then
+        outputFrame.setTextColor(colors.gray)
+        outputFrame.write("[OPEN]")
+    else
+        outputFrame.setTextColor(colors.lime)
+        outputFrame.write("[READY]")
+    end
+
+    outputFrame.setCursorPos(1, 3)
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(string.format("  %-9s", "close, c"))
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.char(26) .. " ")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Close gate ")
+    if not state.gateOpened then
+        outputFrame.setTextColor(colors.gray)
+        outputFrame.write("[CLOSED]")
+    else
+        outputFrame.setTextColor(colors.lime)
+        outputFrame.write("[READY]")
+    end
+
+    outputFrame.setCursorPos(1, 4)
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(string.format("  %-9s", "config"))
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.char(26) .. " ")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Settings (cdsettings.json)")
+
+    outputFrame.setCursorPos(1, 5)
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(string.format("  %-9s", "passwd"))
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.char(26) .. " ")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Change gate password")
+
+    outputFrame.setCursorPos(1, 6)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("  " .. string.char(16) .. " Type 'help <cmd>' for command details")
+
+    outputFrame.setCursorPos(1, 7)
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.rep("-", 44))
+
+    outputFrame.setCursorPos(1, 8)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Page 1/2 " .. string.char(175) .. " Type ")
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write("'help 2'")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write(" for next page")
+end
+
+-- Rendering page 2 of the command help manual
+local function renderHelpPage2(outputFrame)
+    outputFrame.clear()
+    outputFrame.setCursorPos(1, 1)
+
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write("Session & Shell Commands (2/2)")
+
+    outputFrame.setCursorPos(1, 2)
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(string.format("  %-11s", "logout, l"))
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.char(26) .. " ")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Lock console & log off")
+
+    outputFrame.setCursorPos(1, 3)
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(string.format("  %-11s", "clear, cls"))
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.char(26) .. " ")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Clear terminal output")
+
+    outputFrame.setCursorPos(1, 4)
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(string.format("  %-11s", "exit"))
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.char(26) .. " ")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Exit controller interface")
+
+    outputFrame.setCursorPos(1, 5)
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(string.format("  %-11s", "help, man"))
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.char(26) .. " ")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Show command manual")
+
+    outputFrame.setCursorPos(1, 6)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("  " .. string.char(16) .. " Run 'config' to inspect cdsettings.json")
+
+    outputFrame.setCursorPos(1, 7)
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.rep("-", 44))
+
+    outputFrame.setCursorPos(1, 8)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Page 2/2 " .. string.char(175) .. " Type ")
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write("'help 1'")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write(" for first page")
+end
+
+-- Rendering targeted command manual entry
+local function renderHelpCommand(outputFrame, targetCmd, state)
+    outputFrame.clear()
+    outputFrame.setCursorPos(1, 1)
+
+    targetCmd = (targetCmd or ""):lower()
+
+    if targetCmd == "config" or targetCmd == "cfg" or targetCmd == "settings" or targetCmd == "set" or targetCmd == "get" then
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("Manual: config / cfg")
+        outputFrame.setCursorPos(1, 2)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Usage: config [get|set] <key> [val]")
+        outputFrame.setCursorPos(1, 3)
+        outputFrame.write("  " .. string.char(7) .. " config list    " .. string.char(26) .. " View all settings")
+        outputFrame.setCursorPos(1, 4)
+        outputFrame.write("  " .. string.char(7) .. " config get <k> " .. string.char(26) .. " Read setting")
+        outputFrame.setCursorPos(1, 5)
+        outputFrame.write("  " .. string.char(7) .. " config set <k> " .. string.char(26) .. " Change setting")
+        outputFrame.setCursorPos(1, 6)
+        outputFrame.write("Keys: mode, redstone, move, alarm, timeout,")
+        outputFrame.setCursorPos(1, 7)
+        outputFrame.write("      server, proto, modem, sync_timeout")
+        outputFrame.setCursorPos(1, 8)
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("Tip: 'set <k> <v>' works as shorthand")
+
+    elseif targetCmd == "open" or targetCmd == "o" then
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("Manual: open (alias: o)")
+        outputFrame.setCursorPos(1, 2)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Usage: open")
+        outputFrame.setCursorPos(1, 3)
+        outputFrame.write("Initiates gate opening sequence.")
+        outputFrame.setCursorPos(1, 4)
+        outputFrame.write("  " .. string.char(7) .. " STANDALONE: plays alarm & redstone on")
+        outputFrame.setCursorPos(1, 5)
+        outputFrame.write("  " .. string.char(7) .. " SYNC: dispatches request to GateServer")
+        outputFrame.setCursorPos(1, 6)
+        outputFrame.write("Current Gate State: ")
+        if state.gateOpened then
+            outputFrame.setTextColor(colors.lime)
+            outputFrame.write("OPEN")
+        else
+            outputFrame.setTextColor(colors.red)
+            outputFrame.write("CLOSED")
+        end
+        outputFrame.setCursorPos(1, 7)
+        outputFrame.setTextColor(colors.gray)
+        outputFrame.write(string.rep("-", 44))
+        outputFrame.setCursorPos(1, 8)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Run 'close' to shut the gate")
+
+    elseif targetCmd == "close" or targetCmd == "c" then
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("Manual: close (alias: c)")
+        outputFrame.setCursorPos(1, 2)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Usage: close")
+        outputFrame.setCursorPos(1, 3)
+        outputFrame.write("Initiates gate closing sequence.")
+        outputFrame.setCursorPos(1, 4)
+        outputFrame.write("  " .. string.char(7) .. " STANDALONE: plays alarm & redstone off")
+        outputFrame.setCursorPos(1, 5)
+        outputFrame.write("  " .. string.char(7) .. " SYNC: dispatches request to GateServer")
+        outputFrame.setCursorPos(1, 6)
+        outputFrame.write("Current Gate State: ")
+        if state.gateOpened then
+            outputFrame.setTextColor(colors.lime)
+            outputFrame.write("OPEN")
+        else
+            outputFrame.setTextColor(colors.red)
+            outputFrame.write("CLOSED")
+        end
+        outputFrame.setCursorPos(1, 7)
+        outputFrame.setTextColor(colors.gray)
+        outputFrame.write(string.rep("-", 44))
+        outputFrame.setCursorPos(1, 8)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Run 'open' to open the gate")
+
+    elseif targetCmd == "passwd" or targetCmd == "password" or targetCmd == "changepass" or targetCmd == "chpass" then
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("Manual: passwd")
+        outputFrame.setCursorPos(1, 2)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Usage: passwd")
+        outputFrame.setCursorPos(1, 3)
+        outputFrame.write("Starts interactive password modification.")
+        outputFrame.setCursorPos(1, 4)
+        outputFrame.write("  " .. string.char(7) .. " Requires current password if set")
+        outputFrame.setCursorPos(1, 5)
+        outputFrame.write("  " .. string.char(7) .. " Confirm new password to apply")
+        outputFrame.setCursorPos(1, 6)
+        outputFrame.write("  " .. string.char(7) .. " Empty password disables auth & login")
+        outputFrame.setCursorPos(1, 7)
+        outputFrame.setTextColor(colors.gray)
+        outputFrame.write(string.rep("-", 44))
+        outputFrame.setCursorPos(1, 8)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Changes save directly to cdsettings.json")
+
+    elseif targetCmd == "logout" or targetCmd == "logoff" or targetCmd == "l" then
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("Manual: logout (alias: l)")
+        outputFrame.setCursorPos(1, 2)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Usage: logout")
+        outputFrame.setCursorPos(1, 3)
+        outputFrame.write("Ends the current authorized session and")
+        outputFrame.setCursorPos(1, 4)
+        outputFrame.write("returns to the password entry screen.")
+        outputFrame.setCursorPos(1, 5)
+        outputFrame.write("If no password is set, login is bypassed.")
+        outputFrame.setCursorPos(1, 7)
+        outputFrame.setTextColor(colors.gray)
+        outputFrame.write(string.rep("-", 44))
+        outputFrame.setCursorPos(1, 8)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Use 'passwd' to set an access password")
+
+    elseif targetCmd == "clear" or targetCmd == "cls" then
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("Manual: clear (alias: cls)")
+        outputFrame.setCursorPos(1, 2)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Usage: clear")
+        outputFrame.setCursorPos(1, 3)
+        outputFrame.write("Clears all command output and resets")
+        outputFrame.setCursorPos(1, 4)
+        outputFrame.write("the terminal display output area.")
+
+    elseif targetCmd == "exit" or targetCmd == "terminate" then
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("Manual: exit")
+        outputFrame.setCursorPos(1, 2)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Usage: exit")
+        outputFrame.setCursorPos(1, 3)
+        outputFrame.write("Terminates gate controller program and")
+        outputFrame.setCursorPos(1, 4)
+        outputFrame.write("returns to CraftOS terminal session.")
+
+    elseif targetCmd == "help" or targetCmd == "man" or targetCmd == "commands" or targetCmd == "list" or targetCmd == "?" then
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("Manual: help / man")
+        outputFrame.setCursorPos(1, 2)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Usage: help [page | command | -i]")
+        outputFrame.setCursorPos(1, 3)
+        outputFrame.write("  " .. string.char(7) .. " help 1 / help 2  " .. string.char(26) .. " Jump to page")
+        outputFrame.setCursorPos(1, 4)
+        outputFrame.write("  " .. string.char(7) .. " help <command>   " .. string.char(26) .. " View command manual")
+        outputFrame.setCursorPos(1, 5)
+        outputFrame.write("  " .. string.char(7) .. " help -i          " .. string.char(26) .. " Interactive mode")
+
+    else
+        ui.drawPromptArrow(colors.red)
+        outputFrame.setTextColor(colors.red)
+        outputFrame.write("No manual entry for '" .. tostring(targetCmd) .. "'")
+        outputFrame.setCursorPos(1, 3)
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Type 'help' to view all available commands.")
+    end
+end
+
+-- Running interactive paging navigation mode
+local function runInteractiveHelp(outputFrame, state)
+    local curPage = 1
+    local function renderCurrent()
+        if curPage == 1 then
+            renderHelpPage1(outputFrame, state)
+        else
+            renderHelpPage2(outputFrame)
+        end
+        outputFrame.setCursorPos(1, 8)
+        outputFrame.write(string.rep(" ", 44))
+        outputFrame.setCursorPos(1, 8)
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write("[" .. curPage .. "/2] ")
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write("Space/Arrows: flip " .. string.char(179) .. " Enter: ready")
+    end
+
+    renderCurrent()
+
+    local timerId = os.startTimer(15)
+    while true do
+        local event, p1 = os.pullEvent()
+        if event == "timer" and p1 == timerId then
+            break
+        elseif event == "key" then
+            if p1 == keys.space or p1 == keys.pageDown or p1 == keys.down or p1 == keys.right then
+                curPage = (curPage == 1) and 2 or 1
+                renderCurrent()
+            elseif p1 == keys.pageUp or p1 == keys.up or p1 == keys.left then
+                curPage = 1
+                renderCurrent()
+            elseif p1 == keys.enter or p1 == keys.q or p1 == keys.escape then
+                break
+            end
+        end
+    end
+end
+
+-- Rendering configuration overview table
+local function renderConfigList(outputFrame, cfg)
+    outputFrame.clear()
+    outputFrame.setCursorPos(1, 1)
+
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write("Configuration (cdsettings.json)")
+
+    outputFrame.setCursorPos(1, 2)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("mode: ")
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(string.format("%-11s", tostring(cfg.mode)))
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("alarm: ")
+    outputFrame.setTextColor(cfg.alarm_sound and colors.lime or colors.red)
+    outputFrame.write(tostring(cfg.alarm_sound == true))
+
+    outputFrame.setCursorPos(1, 3)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("redstone: ")
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(string.format("%-7s", tostring(cfg.redstone_side or "bottom")))
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("timeout: ")
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write((cfg.timeout or 0) .. "s")
+
+    outputFrame.setCursorPos(1, 4)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("move_time: ")
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write((cfg.move_time or 16) .. "s")
+
+    outputFrame.setCursorPos(1, 5)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("sync.server: ")
+    outputFrame.setTextColor(colors.white)
+    local sName = tostring(cfg.sync and cfg.sync.server_name or "None")
+    outputFrame.write(string.format("%-6s", sName:sub(1, 6)))
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("modem: ")
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(tostring(cfg.sync and cfg.sync.modem_side or "auto"))
+
+    outputFrame.setCursorPos(1, 6)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("sync.proto:  ")
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write(tostring(cfg.sync and cfg.sync.protocol or "None") .. " ")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("(" .. (cfg.sync and cfg.sync.timeout or 3) .. "s)")
+
+    outputFrame.setCursorPos(1, 7)
+    outputFrame.setTextColor(colors.gray)
+    outputFrame.write(string.rep("-", 44))
+
+    outputFrame.setCursorPos(1, 8)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Use: ")
+    outputFrame.setTextColor(colors.white)
+    outputFrame.write("config set <key> <val>")
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write(" " .. string.char(175) .. " 'help config'")
+end
+
+-- Handling configuration inspect and mutate operations
+local function handleConfigCommand(outputFrame, subcmd, key, val, ctx)
+    local cfg = ctx.config.get()
+    local hardware = ctx.hardware
+    local state = ctx.state
+    local ui = ctx.ui
+
+    if not subcmd or subcmd == "" or subcmd == "list" or subcmd == "show" then
+        renderConfigList(outputFrame, cfg)
+        return
+    end
+
+    if subcmd == "get" then
+        if not key or key == "" then
+            outputFrame.setTextColor(colors.white)
+            outputFrame.write("Usage: config get <key>")
+            outputFrame.setCursorPos(1, 3)
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write("Type 'config' to view all settings.")
+            return
+        end
+
+        local normKey = normalizeConfigKey(key)
+        if not normKey then
+            ui.drawPromptArrow(colors.red)
+            outputFrame.setTextColor(colors.red)
+            outputFrame.write("Unknown setting: '" .. tostring(key) .. "'")
+            outputFrame.setCursorPos(1, 3)
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write("Type 'help config' for list of valid keys.")
+            return
+        end
+
+        local displayVal = nil
+        if normKey == "mode" then
+            displayVal = cfg.mode
+        elseif normKey == "redstone_side" then
+            displayVal = cfg.redstone_side
+        elseif normKey == "move_time" then
+            displayVal = (cfg.move_time or 16) .. "s"
+        elseif normKey == "alarm_sound" then
+            displayVal = tostring(cfg.alarm_sound == true)
+        elseif normKey == "timeout" then
+            displayVal = (cfg.timeout or 0) .. "s"
+        elseif normKey == "sync.server_name" then
+            displayVal = cfg.sync and cfg.sync.server_name or "None"
+        elseif normKey == "sync.protocol" then
+            displayVal = cfg.sync and cfg.sync.protocol or "None"
+        elseif normKey == "sync.modem_side" then
+            displayVal = cfg.sync and cfg.sync.modem_side or "auto"
+        elseif normKey == "sync.timeout" then
+            displayVal = (cfg.sync and cfg.sync.timeout or 3) .. "s"
+        end
+
+        outputFrame.setTextColor(colors.white)
+        outputFrame.write(normKey .. ": ")
+        outputFrame.setTextColor(colors.lightGray)
+        outputFrame.write(tostring(displayVal))
+        return
+    end
+
+    if subcmd == "set" then
+        if not key or key == "" then
+            outputFrame.setTextColor(colors.white)
+            outputFrame.write("Usage: config set <key> <value>")
+            outputFrame.setCursorPos(1, 3)
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write("Type 'help config' for list of keys.")
+            return
+        end
+
+        local normKey = normalizeConfigKey(key)
+        if not normKey then
+            ui.drawPromptArrow(colors.red)
+            outputFrame.setTextColor(colors.red)
+            outputFrame.write("Unknown setting: '" .. tostring(key) .. "'")
+            outputFrame.setCursorPos(1, 3)
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write("Type 'help config' for list of keys.")
+            return
+        end
+
+        if not val or val == "" then
+            ui.drawPromptArrow(colors.red)
+            outputFrame.setTextColor(colors.red)
+            outputFrame.write("Error: Missing value for '" .. normKey .. "'")
+            outputFrame.setCursorPos(1, 3)
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write("Usage: config set " .. normKey .. " <value>")
+            return
+        end
+
+        -- Validating and applying setting modifications
+        if normKey == "mode" then
+            local v = val:upper()
+            if v ~= "STANDALONE" and v ~= "SYNC" then
+                ui.drawPromptArrow(colors.red)
+                outputFrame.setTextColor(colors.red)
+                outputFrame.write("Error: mode must be STANDALONE or SYNC")
+                return
+            end
+            cfg.mode = v
+            ctx.config.save(cfg)
+            if ctx.renderStatusBar then ctx.renderStatusBar() end
+            if v == "SYNC" and ctx.sync then
+                ctx.sync.init(cfg)
+            end
+            outputFrame.setTextColor(colors.lime)
+            outputFrame.write("Mode updated to: " .. v)
+            outputFrame.setCursorPos(1, 3)
+            outputFrame.setTextColor(colors.lightGray)
+            outputFrame.write("(Note: Restart recommended for full effect)")
+
+        elseif normKey == "redstone_side" then
+            local validSides = { ["bottom"] = true, ["top"] = true, ["left"] = true, ["right"] = true, ["front"] = true, ["back"] = true }
+            local v = val:lower()
+            if not validSides[v] then
+                ui.drawPromptArrow(colors.red)
+                outputFrame.setTextColor(colors.red)
+                outputFrame.write("Error: invalid side '" .. v .. "'")
+                outputFrame.setCursorPos(1, 3)
+                outputFrame.setTextColor(colors.lightGray)
+                outputFrame.write("Valid sides: top, bottom, left, right, front, back")
+                return
+            end
+            if cfg.mode == "STANDALONE" and cfg.redstone_side ~= v then
+                hardware.setOutput(cfg.redstone_side, false)
+            end
+            cfg.redstone_side = v
+            if cfg.mode == "STANDALONE" then
+                hardware.setOutput(cfg.redstone_side, state.gateOpened)
+            end
+            ctx.config.save(cfg)
+            outputFrame.setTextColor(colors.lime)
+            outputFrame.write("Redstone side set to: " .. v)
+
+        elseif normKey == "move_time" then
+            local num = tonumber(val)
+            if not num or num < 1 or num > 300 then
+                ui.drawPromptArrow(colors.red)
+                outputFrame.setTextColor(colors.red)
+                outputFrame.write("Error: move_time must be between 1 and 300")
+                return
+            end
+            cfg.move_time = math.floor(num)
+            ctx.config.save(cfg)
+            outputFrame.setTextColor(colors.lime)
+            outputFrame.write("Move time set to: " .. cfg.move_time .. "s")
+
+        elseif normKey == "alarm_sound" then
+            local v = val:lower()
+            local bVal = nil
+            if v == "true" or v == "yes" or v == "on" or v == "1" then
+                bVal = true
+            elseif v == "false" or v == "no" or v == "off" or v == "0" then
+                bVal = false
+            else
+                ui.drawPromptArrow(colors.red)
+                outputFrame.setTextColor(colors.red)
+                outputFrame.write("Error: alarm_sound must be true/false or on/off")
+                return
+            end
+            cfg.alarm_sound = bVal
+            hardware.setAlarmSoundEnabled(bVal)
+            ctx.config.save(cfg)
+            outputFrame.setTextColor(colors.lime)
+            outputFrame.write("Alarm sound: " .. (bVal and "ENABLED" or "DISABLED"))
+
+        elseif normKey == "timeout" then
+            local num = tonumber(val)
+            if not num or num < 0 or num > 86400 then
+                ui.drawPromptArrow(colors.red)
+                outputFrame.setTextColor(colors.red)
+                outputFrame.write("Error: timeout must be 0 (disabled) or 1-86400")
+                return
+            end
+            cfg.timeout = math.floor(num)
+            ctx.config.save(cfg)
+            if ctx.session then
+                if cfg.timeout == 0 then
+                    ctx.session.stop()
+                else
+                    ctx.session.start(cfg.timeout)
+                end
+            end
+            if ctx.renderSessionTimer then
+                ctx.renderSessionTimer()
+            end
+            outputFrame.setTextColor(colors.lime)
+            if cfg.timeout == 0 then
+                outputFrame.write("Session timeout disabled.")
+            else
+                outputFrame.write("Session timeout set to: " .. cfg.timeout .. "s")
+            end
+
+        elseif normKey == "sync.server_name" then
+            if val == "" then
+                ui.drawPromptArrow(colors.red)
+                outputFrame.setTextColor(colors.red)
+                outputFrame.write("Error: server_name cannot be empty")
+                return
+            end
+            cfg.sync = cfg.sync or {}
+            cfg.sync.server_name = val
+            ctx.config.save(cfg)
+            if ctx.sync then ctx.sync.init(cfg) end
+            if ctx.renderStatusBar then ctx.renderStatusBar() end
+            outputFrame.setTextColor(colors.lime)
+            outputFrame.write("Sync server name set to: " .. val)
+
+        elseif normKey == "sync.protocol" then
+            if val == "" then
+                ui.drawPromptArrow(colors.red)
+                outputFrame.setTextColor(colors.red)
+                outputFrame.write("Error: protocol cannot be empty")
+                return
+            end
+            cfg.sync = cfg.sync or {}
+            cfg.sync.protocol = val
+            ctx.config.save(cfg)
+            if ctx.sync then ctx.sync.init(cfg) end
+            outputFrame.setTextColor(colors.lime)
+            outputFrame.write("Sync protocol set to: " .. val)
+
+        elseif normKey == "sync.modem_side" then
+            local validModems = { ["auto"] = true, ["bottom"] = true, ["top"] = true, ["left"] = true, ["right"] = true, ["front"] = true, ["back"] = true }
+            local v = val:lower()
+            if not validModems[v] then
+                ui.drawPromptArrow(colors.red)
+                outputFrame.setTextColor(colors.red)
+                outputFrame.write("Error: modem_side must be auto or valid side")
+                return
+            end
+            cfg.sync = cfg.sync or {}
+            cfg.sync.modem_side = v
+            ctx.config.save(cfg)
+            if ctx.sync then ctx.sync.init(cfg) end
+            if ctx.renderStatusBar then ctx.renderStatusBar() end
+            outputFrame.setTextColor(colors.lime)
+            outputFrame.write("Sync modem side set to: " .. v)
+
+        elseif normKey == "sync.timeout" then
+            local num = tonumber(val)
+            if not num or num < 1 or num > 60 then
+                ui.drawPromptArrow(colors.red)
+                outputFrame.setTextColor(colors.red)
+                outputFrame.write("Error: sync.timeout must be between 1 and 60")
+                return
+            end
+            cfg.sync = cfg.sync or {}
+            cfg.sync.timeout = math.floor(num)
+            ctx.config.save(cfg)
+            if ctx.sync then ctx.sync.init(cfg) end
+            outputFrame.setTextColor(colors.lime)
+            outputFrame.write("Sync timeout set to: " .. cfg.sync.timeout .. "s")
+        end
+        return
+    end
+
+    ui.drawPromptArrow(colors.red)
+    outputFrame.setTextColor(colors.red)
+    outputFrame.write("Unknown config action: '" .. tostring(subcmd) .. "'")
+    outputFrame.setCursorPos(1, 3)
+    outputFrame.setTextColor(colors.lightGray)
+    outputFrame.write("Usage: config [get|set] <key> [value]")
+end
+
+-- Checking if command matches an alias category
+function commands.isCommand(aliasCategory, command)
+    local cmd = parseCommandLine(command)
+    return inTable(commandAliases[aliasCategory], cmd)
+end
+
+-- Executing incoming console command line
 function commands.execute(command, ctx)
     local ui = ctx.ui
     local hardware = ctx.hardware
     local cfg = ctx.config.get()
     local state = ctx.state
 
+    local cmd, args = parseCommandLine(command)
+    if cmd == "" then
+        return "OK"
+    end
+
     ui.cancelInstruction()
     ctx.renderScreen()
 
-    if not (inTable(commandAliases["clear"], command) or inTable(commandAliases["logout"], command) or inTable(commandAliases["exit"], command)) then
-        ui.drawPromptArrow()
+    if not (inTable(commandAliases["clear"], cmd) or inTable(commandAliases["logout"], cmd) or inTable(commandAliases["exit"], cmd)) then
+        ui.drawPromptArrow(colors.white)
     end
 
     local outputFrame = ui.createOutputFrame()
     term.redirect(outputFrame)
 
-    if inTable(commandAliases["help"], command) then
-        outputFrame.setTextColor(colors.white)
-        write("help")
-        outputFrame.setTextColor(colors.lightGray)
-        print("   - List of available commands.")
+    -- Executing help and manual command
+    if inTable(commandAliases["help"], cmd) then
+        local firstArg = args[1] and args[1]:lower()
 
-        if state.gateOpened then
-            outputFrame.setTextColor(colors.gray)
-            write("open")
-            outputFrame.setTextColor(colors.lightGray)
-            print("   - Triggers the gate opening.")
-
-            outputFrame.setTextColor(colors.white)
-            write("close")
-            outputFrame.setTextColor(colors.lightGray)
-            print("  - Triggers the gate closing.")
+        if firstArg == "-i" or firstArg == "--interactive" then
+            runInteractiveHelp(outputFrame, state)
+        elseif firstArg == "2" or firstArg == "next" or firstArg == "n" then
+            renderHelpPage2(outputFrame)
+        elseif firstArg == "1" or firstArg == "prev" or firstArg == "p" or not firstArg then
+            renderHelpPage1(outputFrame, state)
         else
-            outputFrame.setTextColor(colors.white)
-            write("open")
-            outputFrame.setTextColor(colors.lightGray)
-            print("   - Triggers the gate opening.")
-
-            outputFrame.setTextColor(colors.gray)
-            write("close")
-            outputFrame.setTextColor(colors.lightGray)
-            print("  - Triggers the gate closing.")
+            renderHelpCommand(outputFrame, firstArg, state)
         end
 
-        outputFrame.setTextColor(colors.white)
-        write("passwd")
-        outputFrame.setTextColor(colors.lightGray)
-        print(" - Change access password.")
+    -- Executing configuration management command
+    elseif inTable(commandAliases["config"], cmd) then
+        local subcmd, key, val
 
-        outputFrame.setTextColor(colors.white)
-        write("clear")
-        outputFrame.setTextColor(colors.lightGray)
-        print("  - Clearing command output.")
+        if cmd == "set" then
+            subcmd = "set"
+            key = args[1]
+            val = args[2]
+        elseif cmd == "get" then
+            subcmd = "get"
+            key = args[1]
+        else
+            subcmd = args[1] and args[1]:lower()
+            key = args[2]
+            val = args[3]
+        end
 
-        outputFrame.setTextColor(colors.white)
-        write("logout")
-        outputFrame.setTextColor(colors.lightGray)
-        print(" - Logging out.")
+        handleConfigCommand(outputFrame, subcmd, key, val, ctx)
 
-        outputFrame.setTextColor(colors.white)
-        write("exit")
-        outputFrame.setTextColor(colors.lightGray)
-        print("   - Terminating gate controller interface.")
-
-    elseif inTable(commandAliases["open"], command) then
+    -- Executing gate open sequence
+    elseif inTable(commandAliases["open"], cmd) then
         if cfg.mode == "SYNC" then
             if ctx.sync then
                 print("Sending open request to server...")
@@ -97,11 +802,13 @@ function commands.execute(command, ctx)
                 if ok then
                     print(res and res.message or "Gate opening engaged on server.")
                 else
+                    ui.drawPromptArrow(colors.red)
                     outputFrame.setTextColor(colors.red)
                     print("Error: " .. (res and res.message or "Failed to connect to server"))
                     outputFrame.setTextColor(colors.white)
                 end
             else
+                ui.drawPromptArrow(colors.red)
                 outputFrame.setTextColor(colors.red)
                 print("Error: Sync module not available.")
                 outputFrame.setTextColor(colors.white)
@@ -141,7 +848,8 @@ function commands.execute(command, ctx)
             end
         end
 
-    elseif inTable(commandAliases["close"], command) then
+    -- Executing gate close sequence
+    elseif inTable(commandAliases["close"], cmd) then
         if cfg.mode == "SYNC" then
             if ctx.sync then
                 print("Sending close request to server...")
@@ -149,11 +857,13 @@ function commands.execute(command, ctx)
                 if ok then
                     print(res and res.message or "Gate closing engaged on server.")
                 else
+                    ui.drawPromptArrow(colors.red)
                     outputFrame.setTextColor(colors.red)
                     print("Error: " .. (res and res.message or "Failed to connect to server"))
                     outputFrame.setTextColor(colors.white)
                 end
             else
+                ui.drawPromptArrow(colors.red)
                 outputFrame.setTextColor(colors.red)
                 print("Error: Sync module not available.")
                 outputFrame.setTextColor(colors.white)
@@ -193,9 +903,10 @@ function commands.execute(command, ctx)
             end
         end
 
-    elseif inTable(commandAliases["passwd"], command) then
+    -- Executing password alteration sequence
+    elseif inTable(commandAliases["passwd"], cmd) then
         outputFrame.setTextColor(colors.white)
-        print("--- Change Password ---")
+        print("Change Password")
 
         local canProceed = false
         if ctx.auth.hasPassword(cfg) then
@@ -207,6 +918,7 @@ function commands.execute(command, ctx)
             if ctx.auth.verify(cur, cfg, ctx.sha256) then
                 canProceed = true
             else
+                ui.drawPromptArrow(colors.red)
                 outputFrame.setTextColor(colors.red)
                 print("Incorrect current password.")
             end
@@ -251,13 +963,20 @@ function commands.execute(command, ctx)
                     print("Password changed successfully!")
                 end
             else
+                ui.drawPromptArrow(colors.red)
                 outputFrame.setTextColor(colors.red)
                 print("Passwords do not match.")
             end
         end
-        sleep(1.5)
 
-    elseif inTable(commandAliases["logout"], command) then
+    -- Executing terminal clear command
+    elseif inTable(commandAliases["clear"], cmd) then
+        outputFrame.clear()
+        term.redirect(ui.getFrame())
+        return "OK"
+
+    -- Executing user logout sequence
+    elseif inTable(commandAliases["logout"], cmd) then
         if not ctx.auth.hasPassword(cfg) then
             outputFrame.setTextColor(colors.yellow)
             print("No password set. Authorization is disabled.")
@@ -276,8 +995,15 @@ function commands.execute(command, ctx)
         sleep(1.5)
         return "Logout"
 
-    elseif inTable(commandAliases["exit"], command) then
+    -- Executing application termination sequence
+    elseif inTable(commandAliases["exit"], cmd) then
         return "Exit"
+    else
+        ui.drawPromptArrow(colors.red)
+        outputFrame.setTextColor(colors.red)
+        print("Unknown command: " .. tostring(cmd))
+        outputFrame.setTextColor(colors.lightGray)
+        print("Type 'help' for available commands.")
     end
 
     term.redirect(ui.getFrame())

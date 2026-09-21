@@ -54,6 +54,7 @@ term.setPaletteColor(colors.yellow, 0xFFD800)
 term.setPaletteColor(colors.lightGray, 0xB2B2B2)
 term.setPaletteColor(colors.gray, 0x404040)
 term.setPaletteColor(colors.black, 0x1E1E1E)
+term.setPaletteColor(colors.red, 0xFF453A)
 
 local parentScreen = term.current()
 local w, h = term.getSize()
